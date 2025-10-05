@@ -397,8 +397,17 @@
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
 
+            // 設置超時（60秒）
+            xhr.timeout = 60000;
+
+            let lastProgressTime = Date.now();
+            let uploadStarted = false;
+
             // 上傳進度事件
             xhr.upload.addEventListener('progress', (e) => {
+                uploadStarted = true;
+                lastProgressTime = Date.now();
+
                 if (e.lengthComputable) {
                     const percentComplete = Math.round((e.loaded / e.total) * 100);
                     const overallProgress = Math.round((fileIndex / totalFiles) * 100 + (percentComplete / totalFiles));
@@ -406,12 +415,17 @@
                     const progressBar = document.getElementById('batchProgressBar');
                     const progressText = document.getElementById('batchProgressText');
 
-                    progressBar.style.width = overallProgress + '%';
-                    progressText.textContent = `${overallProgress}% - 上傳第 ${fileIndex + 1}/${totalFiles} 個檔案 (${percentComplete}%)`;
+                    if (progressBar && progressText) {
+                        progressBar.style.width = overallProgress + '%';
+                        progressText.textContent = `${overallProgress}% - 上傳第 ${fileIndex + 1}/${totalFiles} 個檔案 (${percentComplete}%)`;
+                    }
+
+                    console.log(`上傳進度: ${percentComplete}% (${e.loaded}/${e.total} bytes)`);
                 }
             });
 
             xhr.addEventListener('load', () => {
+                console.log(`XHR 加載完成，狀態: ${xhr.status}`);
                 if (xhr.status === 200) {
                     try {
                         const data = JSON.parse(xhr.responseText);
@@ -422,19 +436,48 @@
                         console.log('top_k 數據:', result.top_k);
                         resolve(result);
                     } catch (error) {
-                        reject(new Error('解析回應失敗'));
+                        console.error('解析回應失敗:', error);
+                        reject(new Error('解析回應失敗: ' + error.message));
                     }
                 } else {
-                    reject(new Error(`HTTP ${xhr.status}`));
+                    console.error(`HTTP 錯誤: ${xhr.status} ${xhr.statusText}`);
+                    reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
                 }
             });
 
-            xhr.addEventListener('error', () => {
-                reject(new Error('網路錯誤'));
+            xhr.addEventListener('error', (e) => {
+                console.error('XHR 錯誤事件:', e);
+                reject(new Error('網路錯誤：無法連接到伺服器'));
             });
 
+            xhr.addEventListener('timeout', () => {
+                console.error('XHR 超時');
+                reject(new Error('請求超時（60秒）'));
+            });
+
+            xhr.addEventListener('abort', () => {
+                console.error('XHR 被中斷');
+                reject(new Error('請求被中斷'));
+            });
+
+            console.log(`開始上傳檔案: ${file.name} (${file.size} bytes)`);
             xhr.open('POST', '/api/upload', true);
             xhr.send(formData);
+
+            // 檢測卡住的情況
+            const stuckCheckInterval = setInterval(() => {
+                const timeSinceLastProgress = Date.now() - lastProgressTime;
+                if (uploadStarted && timeSinceLastProgress > 10000) { // 10秒沒進度
+                    console.warn('上傳似乎卡住了，已經 ' + (timeSinceLastProgress/1000) + ' 秒沒有進度');
+                    clearInterval(stuckCheckInterval);
+                    xhr.abort();
+                    reject(new Error('上傳卡住（10秒無響應）'));
+                }
+            }, 2000);
+
+            xhr.addEventListener('load', () => clearInterval(stuckCheckInterval));
+            xhr.addEventListener('error', () => clearInterval(stuckCheckInterval));
+            xhr.addEventListener('abort', () => clearInterval(stuckCheckInterval));
         });
     }
 
