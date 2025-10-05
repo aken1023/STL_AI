@@ -109,8 +109,11 @@
 
             <!-- 上傳進度 -->
             <div id="uploadProgress" class="mt-4" style="display:none;">
-                <div class="progress">
-                    <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                <div class="progress" style="height: 30px;">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar" style="width: 0%">
+                        <span id="progressText" style="font-weight: 600; font-size: 14px;">0%</span>
+                    </div>
                 </div>
                 <p id="uploadStatus" class="mt-2 text-muted"></p>
             </div>
@@ -233,51 +236,113 @@
 
         const progressDiv = document.getElementById('uploadProgress');
         const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
         const uploadStatus = document.getElementById('uploadStatus');
         const resultsDiv = document.getElementById('uploadResults');
 
         progressDiv.style.display = 'block';
-        uploadStatus.textContent = '上傳中...';
+        uploadStatus.textContent = '準備上傳...';
         uploadBtn.disabled = true;
+        clearBtn.disabled = true;
 
-        fetch('/api/upload_stl', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            progressBar.style.width = '100%';
-            progressBar.className = data.success ? 'progress-bar bg-success' : 'progress-bar bg-danger';
-            uploadStatus.textContent = data.success ? '上傳完成！' : '上傳失敗';
+        // 使用 XMLHttpRequest 來追蹤上傳進度
+        const xhr = new XMLHttpRequest();
 
-            if (data.success) {
-                resultsDiv.innerHTML = `
-                    <div class="alert alert-success">
-                        <i class="fas fa-check-circle"></i> 成功上傳 ${data.files ? data.files.length : 0} 個檔案
-                    </div>
-                `;
-                setTimeout(() => {
-                    window.location.href = '/stl';
-                }, 2000);
+        // 上傳進度事件
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = percentComplete + '%';
+                progressText.textContent = percentComplete + '%';
+                uploadStatus.textContent = `上傳中... ${percentComplete}% (${formatFileSize(e.loaded)} / ${formatFileSize(e.total)})`;
+            }
+        });
+
+        // 上傳開始
+        xhr.upload.addEventListener('loadstart', () => {
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+            uploadStatus.textContent = '開始上傳...';
+        });
+
+        // 上傳完成（等待服務器響應）
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    progressBar.style.width = '100%';
+                    progressText.textContent = '100%';
+                    progressBar.className = data.success
+                        ? 'progress-bar bg-success'
+                        : 'progress-bar bg-danger';
+                    uploadStatus.textContent = data.success ? '上傳完成！' : '上傳失敗';
+
+                    if (data.success) {
+                        resultsDiv.innerHTML = `
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle"></i> 成功上傳 ${data.files ? data.files.length : 0} 個檔案
+                            </div>
+                        `;
+                        setTimeout(() => {
+                            window.location.href = '/stl';
+                        }, 2000);
+                    } else {
+                        resultsDiv.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-circle"></i> ${data.error || data.message}
+                            </div>
+                        `;
+                        uploadBtn.disabled = false;
+                        clearBtn.disabled = false;
+                    }
+                } catch (error) {
+                    progressBar.className = 'progress-bar bg-danger';
+                    uploadStatus.textContent = '解析回應錯誤';
+                    resultsDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle"></i> 服務器回應錯誤
+                        </div>
+                    `;
+                    uploadBtn.disabled = false;
+                    clearBtn.disabled = false;
+                }
             } else {
+                progressBar.className = 'progress-bar bg-danger';
+                uploadStatus.textContent = `上傳失敗 (HTTP ${xhr.status})`;
                 resultsDiv.innerHTML = `
                     <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-circle"></i> ${data.error || data.message}
+                        <i class="fas fa-exclamation-circle"></i> 服務器錯誤: ${xhr.status}
                     </div>
                 `;
                 uploadBtn.disabled = false;
+                clearBtn.disabled = false;
             }
-        })
-        .catch(error => {
+        });
+
+        // 網路錯誤
+        xhr.addEventListener('error', () => {
             progressBar.className = 'progress-bar bg-danger';
-            uploadStatus.textContent = '上傳錯誤';
+            uploadStatus.textContent = '網路錯誤';
             resultsDiv.innerHTML = `
                 <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-circle"></i> 網路錯誤: ${error.message}
+                    <i class="fas fa-exclamation-circle"></i> 網路連接錯誤，請檢查網路後重試
                 </div>
             `;
             uploadBtn.disabled = false;
+            clearBtn.disabled = false;
         });
+
+        // 上傳中斷
+        xhr.addEventListener('abort', () => {
+            progressBar.className = 'progress-bar bg-warning';
+            uploadStatus.textContent = '上傳已取消';
+            uploadBtn.disabled = false;
+            clearBtn.disabled = false;
+        });
+
+        // 發送請求
+        xhr.open('POST', '/api/upload_stl', true);
+        xhr.send(formData);
     });
 </script>
 {% endblock %}

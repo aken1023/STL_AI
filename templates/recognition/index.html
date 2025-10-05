@@ -3,6 +3,10 @@
 {% block title %}模型識別 - STL 系統{% endblock %}
 
 {% block extra_head %}
+<!-- Three.js for 3D STL preview -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 {% endblock %}
 
 {% block extra_css %}
@@ -88,6 +92,16 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-body">
+                    <!-- 顯示選項 -->
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="show3DPreview" checked>
+                            <label class="form-check-label" for="show3DPreview">
+                                <i class="fas fa-cube"></i> 顯示 3D 預覽（取消勾選僅顯示分類編號）
+                            </label>
+                        </div>
+                    </div>
+
                     <div id="dragDropArea" class="drag-drop-area">
                         <i class="fas fa-cloud-upload-alt fa-4x text-primary mb-3"></i>
                         <h4>拖拉圖片到這裡</h4>
@@ -326,10 +340,7 @@
 
         for (let i = 0; i < selectedFiles.length; i++) {
             const file = selectedFiles[i];
-            const progress = Math.round(((i + 1) / selectedFiles.length) * 100);
 
-            progressBar.style.width = progress + '%';
-            progressText.textContent = progress + '%';
             statusText.textContent = `正在識別: ${file.name} (${i + 1}/${selectedFiles.length})`;
 
             // 更新預覽狀態
@@ -340,9 +351,9 @@
                 badge.textContent = '識別中...';
             }
 
-            // 執行識別
+            // 執行識別（會自動更新進度條）
             try {
-                const result = await recognizeImage(file);
+                const result = await recognizeImage(file, i, selectedFiles.length);
                 result.file = file;
                 recognitionResults.push(result);
 
@@ -379,18 +390,52 @@
     });
 
     // 執行單個圖片識別
-    async function recognizeImage(file) {
+    async function recognizeImage(file, fileIndex, totalFiles) {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData
-        });
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
 
-        const data = await response.json();
-        // 返回 results 陣列中的第一個結果
-        return data.results && data.results.length > 0 ? data.results[0] : data;
+            // 上傳進度事件
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    const overallProgress = Math.round((fileIndex / totalFiles) * 100 + (percentComplete / totalFiles));
+
+                    const progressBar = document.getElementById('batchProgressBar');
+                    const progressText = document.getElementById('batchProgressText');
+
+                    progressBar.style.width = overallProgress + '%';
+                    progressText.textContent = `${overallProgress}% - 上傳第 ${fileIndex + 1}/${totalFiles} 個檔案 (${percentComplete}%)`;
+                }
+            });
+
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        console.log('API 返回的完整數據:', data);
+                        // 返回 results 陣列中的第一個結果
+                        const result = data.results && data.results.length > 0 ? data.results[0] : data;
+                        console.log('處理後的結果:', result);
+                        console.log('top_k 數據:', result.top_k);
+                        resolve(result);
+                    } catch (error) {
+                        reject(new Error('解析回應失敗'));
+                    }
+                } else {
+                    reject(new Error(`HTTP ${xhr.status}`));
+                }
+            });
+
+            xhr.addEventListener('error', () => {
+                reject(new Error('網路錯誤'));
+            });
+
+            xhr.open('POST', '/api/upload', true);
+            xhr.send(formData);
+        });
     }
 
     // 顯示結果
@@ -445,26 +490,33 @@
                                 ${show3D && result.top_k ? `
                                     <div class="mt-3">
                                         <strong>📊 Top 5 最接近的 STL 模型:</strong>
+                                        <p class="text-muted small mt-1 mb-2"><i class="fas fa-hand-pointer"></i> 點擊下方卡片可在上方 3D 預覽中查看該模型</p>
                                         <div class="row mt-2">
                                             ${result.top_k.slice(0, 5).map((item, idx) => `
                                                 <div class="col-12 col-md-6 col-lg-4 mb-3">
-                                                    <div class="card h-100 ${idx === 0 ? 'border-success border-2' : ''}">
+                                                    <div class="card h-100 ${idx === 0 ? 'border-success border-2' : ''} stl-model-card"
+                                                         style="cursor: pointer; transition: all 0.2s;"
+                                                         onclick="loadSTLInMainViewer(${index}, '${item.stl_file}', '${item.class_name}')"
+                                                         onmouseenter="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)';"
+                                                         onmouseleave="this.style.transform='scale(1)'; this.style.boxShadow='';">
                                                         <div class="card-header ${idx === 0 ? 'bg-success text-white' : 'bg-light'} p-2">
                                                             <small class="mb-0"><strong>#${idx + 1}: ${item.class_name}</strong></small><br>
                                                             <span class="badge ${idx === 0 ? 'bg-white text-success' : 'bg-secondary'}">${(item.confidence * 100).toFixed(1)}%</span>
                                                         </div>
-                                                        ${item.stl_file ? `
-                                                            <div class="stl-viewer-inline" data-stl-url="${item.stl_file}" style="width: 100%; height: 250px; background: #f8f9fa;"></div>
+                                                        ${item.stl_preview ? `
+                                                            <img src="${item.stl_preview}" class="card-img-top" style="height: 200px; object-fit: cover;" alt="${item.class_name}">
                                                         ` : `
-                                                            <div class="bg-secondary d-flex align-items-center justify-content-center" style="height: 250px;">
+                                                            <div class="bg-secondary d-flex align-items-center justify-content-center" style="height: 200px;">
                                                                 <i class="fas fa-cube fa-3x text-white"></i>
                                                             </div>
                                                         `}
+                                                        <div class="card-body p-2 text-center">
+                                                            <small class="text-muted"><i class="fas fa-eye"></i> 點擊預覽</small>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             `).join('')}
                                         </div>
-                                        <p class="text-muted small mt-2"><i class="fas fa-info-circle"></i> 每個模型都可以單獨操作：拖曳旋轉 | 滾輪縮放</p>
                                     </div>
                                 ` : ''}
                             </div>
@@ -626,6 +678,57 @@
                 container.innerHTML = '<div class="alert alert-danger m-2 small">無法載入 3D 模型</div>';
             }
         );
+    }
+
+    // 在主查看器中加載選定的 STL 模型
+    function loadSTLInMainViewer(resultIndex, stlFile, modelName) {
+        if (!stlFile) {
+            alert('此模型沒有對應的 STL 檔案');
+            return;
+        }
+
+        // 找到主查看器容器
+        const mainViewerContainer = document.getElementById(`stl3d_main_${resultIndex}`);
+        if (!mainViewerContainer) {
+            console.error('找不到主查看器容器');
+            return;
+        }
+
+        // 找到並清理對應的查看器
+        const viewerIndex = inlineViewers.findIndex(v => {
+            return v.renderer && v.renderer.domElement &&
+                   v.renderer.domElement.parentElement === mainViewerContainer;
+        });
+
+        if (viewerIndex !== -1) {
+            const oldViewer = inlineViewers[viewerIndex];
+            if (oldViewer.renderer) oldViewer.renderer.dispose();
+            if (oldViewer.mesh && oldViewer.mesh.geometry) oldViewer.mesh.geometry.dispose();
+            if (oldViewer.mesh && oldViewer.mesh.material) oldViewer.mesh.material.dispose();
+            inlineViewers.splice(viewerIndex, 1);
+        }
+
+        // 重新初始化查看器並加載新模型
+        initInlineViewer(mainViewerContainer, stlFile);
+
+        // 滾動到主查看器
+        mainViewerContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // 顯示提示
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-info alert-dismissible fade show position-fixed';
+        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+        toast.innerHTML = `
+            <strong><i class="fas fa-cube"></i> ${modelName}</strong>
+            <p class="mb-0 small">已在上方 3D 預覽中加載</p>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 3000);
     }
 
 </script>
