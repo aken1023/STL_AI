@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}生成圖片 - STL 系統{% endblock %}
+
+{% block extra_css %}
+<style>
+    .mode-card {
+        height: 100%;
+        min-height: 200px;
+        transition: all 0.3s ease;
+    }
+
+    .mode-card .card-body {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .mode-card ul {
+        flex-grow: 1;
+        margin-bottom: 0;
+    }
+
+    .mode-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-image"></i> STL 圖片生成</h2>
+            <p class="text-muted">從 STL 檔案生成多角度訓練圖片</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">生成設定</h5>
+        </div>
+        <div class="card-body">
+            <!-- 訓練模式選擇 -->
+            <div class="mb-4">
+                <h6>訓練模式</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mode-card" id="normalModeCard" style="cursor: pointer; border: 2px solid #dee2e6;">
+                            <div class="card-body">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="trainingMode" id="normalMode" value="normal" checked>
+                                    <label class="form-check-label" for="normalMode">
+                                        <h5><i class="fas fa-bolt text-primary"></i> 正常訓練</h5>
+                                    </label>
+                                </div>
+                                <p class="text-muted mb-2">每個 STL 模型生成 <strong>60 張</strong>圖片</p>
+                                <ul class="text-muted small">
+                                    <li>訓練速度快</li>
+                                    <li>適合快速測試</li>
+                                    <li>基本角度覆蓋</li>
+                                    <li>簡單光照效果</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mode-card" id="precisionModeCard" style="cursor: pointer; border: 2px solid #dee2e6;">
+                            <div class="card-body">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="trainingMode" id="precisionMode" value="precision">
+                                    <label class="form-check-label" for="precisionMode">
+                                        <h5><i class="fas fa-bullseye text-success"></i> 精準訓練</h5>
+                                    </label>
+                                </div>
+                                <p class="text-muted mb-2">每個 STL 模型生成 <strong>360 張</strong>圖片</p>
+                                <ul class="text-muted small">
+                                    <li>完整 360° 角度覆蓋</li>
+                                    <li>加入光照干擾</li>
+                                    <li>加入背景干擾</li>
+                                    <li>識別準確率更高</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button id="generateAllBtn" class="btn btn-primary btn-lg">
+                <i class="fas fa-magic"></i> 開始生成圖片
+            </button>
+            <a href="/stl" class="btn btn-secondary btn-lg">
+                <i class="fas fa-arrow-left"></i> 返回列表
+            </a>
+            <p class="text-muted mt-3" id="modeDescription">將使用正常訓練模式生成圖片</p>
+
+            <!-- 生成進度 -->
+            <div id="generateProgress" class="mt-4" style="display:none;">
+                <div class="progress" style="height: 30px;">
+                    <div id="generateProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar" style="width: 0%">
+                        <span id="generateProgressText">0%</span>
+                    </div>
+                </div>
+                <p id="generateStatus" class="mt-2"></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 模式卡片選擇
+    const normalModeCard = document.getElementById('normalModeCard');
+    const precisionModeCard = document.getElementById('precisionModeCard');
+    const normalModeRadio = document.getElementById('normalMode');
+    const precisionModeRadio = document.getElementById('precisionMode');
+    const modeDescription = document.getElementById('modeDescription');
+
+    // 更新卡片樣式
+    function updateCardStyles() {
+        if (normalModeRadio.checked) {
+            normalModeCard.style.border = '2px solid #667eea';
+            normalModeCard.style.background = 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)';
+            precisionModeCard.style.border = '2px solid #dee2e6';
+            precisionModeCard.style.background = 'white';
+            modeDescription.textContent = '將使用正常訓練模式生成 60 張圖片';
+        } else {
+            precisionModeCard.style.border = '2px solid #28a745';
+            precisionModeCard.style.background = 'linear-gradient(135deg, rgba(40, 167, 69, 0.05) 0%, rgba(34, 139, 34, 0.05) 100%)';
+            normalModeCard.style.border = '2px solid #dee2e6';
+            normalModeCard.style.background = 'white';
+            modeDescription.textContent = '將使用精準訓練模式生成 360 張圖片（含干擾）';
+        }
+    }
+
+    // 點擊卡片切換選項
+    normalModeCard.addEventListener('click', () => {
+        normalModeRadio.checked = true;
+        updateCardStyles();
+    });
+
+    precisionModeCard.addEventListener('click', () => {
+        precisionModeRadio.checked = true;
+        updateCardStyles();
+    });
+
+    normalModeRadio.addEventListener('change', updateCardStyles);
+    precisionModeRadio.addEventListener('change', updateCardStyles);
+
+    // 初始化樣式
+    updateCardStyles();
+
+    // 開始生成
+    document.getElementById('generateAllBtn').addEventListener('click', function() {
+        const mode = document.querySelector('input[name="trainingMode"]:checked').value;
+        const imageCount = mode === 'normal' ? 60 : 360;
+
+        if (!confirm(`確定要使用${mode === 'normal' ? '正常訓練' : '精準訓練'}模式生成圖片嗎？\n每個 STL 將生成 ${imageCount} 張圖片，這可能需要一些時間。`)) {
+            return;
+        }
+
+        const progressDiv = document.getElementById('generateProgress');
+        const progressBar = document.getElementById('generateProgressBar');
+        const progressText = document.getElementById('generateProgressText');
+        const statusText = document.getElementById('generateStatus');
+
+        progressDiv.style.display = 'block';
+        this.disabled = true;
+
+        fetch('/api/generate_all_images', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                mode: mode
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 開始輪詢進度
+                const statusInterval = setInterval(() => {
+                    fetch('/api/image_generation_status')
+                        .then(r => r.json())
+                        .then(status => {
+                            if (status.is_running) {
+                                const percent = status.progress || 0;
+                                progressBar.style.width = percent + '%';
+                                progressText.textContent = percent + '%';
+                                statusText.textContent = status.message || '生成中...';
+                            } else {
+                                clearInterval(statusInterval);
+                                progressBar.className = 'progress-bar bg-success';
+                                progressBar.style.width = '100%';
+                                progressText.textContent = '完成';
+                                statusText.textContent = '圖片生成完成！';
+
+                                setTimeout(() => {
+                                    window.location.href = '/stl';
+                                }, 2000);
+                            }
+                        });
+                }, 1000);
+            } else {
+                alert('啟動失敗: ' + (data.error || data.message));
+                this.disabled = false;
+                progressDiv.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            alert('請求失敗: ' + error.message);
+            this.disabled = false;
+            progressDiv.style.display = 'none';
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>識別紀錄顯示測試</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f8f9fa;
+            padding: 20px;
+        }
+        .demo-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .list-group-item {
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1 class="mb-4">
+            <i class="fas fa-history"></i> 最近識別紀錄顯示測試
+        </h1>
+
+        <div class="alert alert-info">
+            <strong>測試說明</strong>：此頁面展示識別紀錄的顯示效果
+            <ul class="mb-0 mt-2">
+                <li>✅ 實際照片（綠色邊框）</li>
+                <li>✅ 參考模型（藍色邊框）</li>
+                <li>✅ 點擊圖片可放大查看</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-history"></i> 最近識別紀錄
+                    <span class="badge bg-primary ms-2">3</span>
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group" id="historyContent">
+                    <!-- 紀錄會動態載入這裡 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 模擬識別紀錄資料
+        const mockRecords = [
+            {
+                id: 1,
+                predicted_class: 'R8107490',
+                confidence: 0.95,
+                method: 'FAISS',
+                success: true,
+                upload_filename: 'photo1.jpg',
+                timestamp: new Date(Date.now() - 120000).toISOString(), // 2分鐘前
+                inference_time: 150,
+                upload_file_path: 'https://via.placeholder.com/100/28a745/ffffff?text=實際照片',
+                reference_image_path: 'https://via.placeholder.com/100/007bff/ffffff?text=參考模型'
+            },
+            {
+                id: 2,
+                predicted_class: 'R8108140',
+                confidence: 0.88,
+                method: 'FAISS',
+                success: true,
+                upload_filename: 'image2.png',
+                timestamp: new Date(Date.now() - 300000).toISOString(), // 5分鐘前
+                inference_time: 180,
+                upload_file_path: 'https://via.placeholder.com/100/28a745/ffffff?text=實際照片',
+                reference_image_path: 'https://via.placeholder.com/100/007bff/ffffff?text=參考模型'
+            },
+            {
+                id: 3,
+                predicted_class: 'R8112078',
+                confidence: 0.76,
+                method: 'FAISS',
+                success: true,
+                upload_filename: 'test.jpg',
+                timestamp: new Date(Date.now() - 600000).toISOString(), // 10分鐘前
+                inference_time: 200,
+                upload_file_path: 'https://via.placeholder.com/100/28a745/ffffff?text=實際照片',
+                // 沒有參考圖
+            }
+        ];
+
+        function getTimeAgo(timestamp) {
+            const now = new Date();
+            const past = new Date(timestamp);
+            const diff = Math.floor((now - past) / 1000); // 秒
+
+            if (diff < 60) return `${diff}秒前`;
+            if (diff < 3600) return `${Math.floor(diff / 60)}分鐘前`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}小時前`;
+            return past.toLocaleDateString('zh-TW');
+        }
+
+        function displayHistory(records) {
+            const container = document.getElementById('historyContent');
+            let html = '';
+
+            records.forEach(record => {
+                const statusBadge = record.success
+                    ? '<span class="badge bg-success">成功</span>'
+                    : '<span class="badge bg-danger">失敗</span>';
+
+                const confidenceBadge = record.confidence
+                    ? `<span class="badge bg-info">${(record.confidence * 100).toFixed(1)}%</span>`
+                    : '';
+
+                const methodBadge = record.method === 'FAISS'
+                    ? '<span class="badge bg-primary">FAISS</span>'
+                    : `<span class="badge bg-secondary">${record.method || '未知'}</span>`;
+
+                const timeAgo = getTimeAgo(record.timestamp);
+
+                html += `
+                    <div class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    ${record.predicted_class || '未知類別'}
+                                    ${confidenceBadge}
+                                    ${methodBadge}
+                                    ${statusBadge}
+                                </h6>
+                                <p class="mb-1 text-muted small">
+                                    <i class="fas fa-image"></i> ${record.upload_filename || '未知檔案'}
+                                </p>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock"></i> ${timeAgo}
+                                    ${record.inference_time ? `| <i class="fas fa-tachometer-alt"></i> ${record.inference_time.toFixed(0)}ms` : ''}
+                                </small>
+                            </div>
+                            <div class="ms-3 d-flex gap-2">
+                                ${record.upload_file_path ? `
+                                    <div style="text-align: center;">
+                                        <small class="text-muted d-block mb-1" style="font-size: 0.7rem;">
+                                            <i class="fas fa-camera"></i> 實際照片
+                                        </small>
+                                        <img src="${record.upload_file_path}"
+                                             style="width: 100px; height: 100px; object-fit: contain; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15); border: 3px solid #28a745; background: #f8f9fa;"
+                                             onclick="showImagePreview('${record.upload_file_path}', '實際上傳照片')"
+                                             alt="實際上傳照片"
+                                             title="點擊查看大圖">
+                                    </div>
+                                ` : ''}
+                                ${record.reference_image_path ? `
+                                    <div style="text-align: center;">
+                                        <small class="text-muted d-block mb-1" style="font-size: 0.7rem;">
+                                            <i class="fas fa-cube"></i> 參考模型
+                                        </small>
+                                        <img src="${record.reference_image_path}"
+                                             style="width: 100px; height: 100px; object-fit: contain; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15); border: 3px solid #007bff; background: #f8f9fa;"
+                                             onclick="showImagePreview('${record.reference_image_path}', 'STL 模型參考圖')"
+                                             alt="STL 參考圖"
+                                             title="點擊查看大圖">
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function showImagePreview(imagePath, title = '圖片預覽') {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.9);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                z-index: 9999;
+                cursor: pointer;
+                padding: 20px;
+            `;
+
+            const titleDiv = document.createElement('div');
+            titleDiv.style.cssText = `
+                color: white;
+                font-size: 1.2rem;
+                margin-bottom: 15px;
+                text-align: center;
+                font-weight: 600;
+                text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            `;
+            titleDiv.innerHTML = `<i class="fas fa-search-plus"></i> ${title}`;
+
+            const img = document.createElement('img');
+            img.src = imagePath;
+            img.style.cssText = `
+                max-width: 90%;
+                max-height: 80vh;
+                border-radius: 12px;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                border: 4px solid white;
+            `;
+
+            const closeHint = document.createElement('div');
+            closeHint.style.cssText = `
+                color: rgba(255,255,255,0.7);
+                font-size: 0.9rem;
+                margin-top: 15px;
+                text-align: center;
+            `;
+            closeHint.innerHTML = '<i class="fas fa-times-circle"></i> 點擊任意位置或按 ESC 關閉';
+
+            modal.appendChild(titleDiv);
+            modal.appendChild(img);
+            modal.appendChild(closeHint);
+            modal.onclick = () => document.body.removeChild(modal);
+
+            const handleEscape = (e) => {
+                if (e.key === 'Escape') {
+                    document.body.removeChild(modal);
+                    document.removeEventListener('keydown', handleEscape);
+                }
+            };
+            document.addEventListener('keydown', handleEscape);
+
+            document.body.appendChild(modal);
+        }
+
+        // 載入模擬資料
+        displayHistory(mockRecords);
+    </script>
+</body>
+</html>

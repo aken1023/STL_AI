@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STL 物件識別系統 - 多檔案上傳</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 0;
+        }
+        .drop-zone {
+            border: 3px dashed #007bff;
+            border-radius: 15px;
+            padding: 50px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: #28a745;
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            transform: scale(1.02);
+        }
+        .drop-zone-icon {
+            font-size: 4rem;
+            color: #007bff;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        .drop-zone:hover .drop-zone-icon,
+        .drop-zone.drag-over .drop-zone-icon {
+            color: #28a745;
+            animation: bounce 0.5s ease-in-out;
+        }
+        @keyframes bounce {
+            0%, 20%, 60%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-20px); }
+            80% { transform: translateY(-10px); }
+        }
+        .file-preview {
+            display: none;
+            margin-top: 20px;
+        }
+        .file-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .file-info {
+            display: flex;
+            align-items: center;
+        }
+        .file-info i {
+            margin-right: 10px;
+            font-size: 1.5rem;
+            color: #007bff;
+        }
+        .remove-file {
+            color: #dc3545;
+            cursor: pointer;
+            padding: 5px;
+        }
+        .result-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .prediction-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+        }
+        .high-confidence { border-left-color: #28a745; }
+        .medium-confidence { border-left-color: #ffc107; }
+        .low-confidence { border-left-color: #dc3545; }
+        .result-image {
+            max-width: 300px;
+            max-height: 200px;
+            border-radius: 8px;
+            margin: 10px 0;
+            object-fit: contain;
+        }
+        .progress-container {
+            display: none;
+            margin: 20px 0;
+        }
+        .model-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .loading {
+            display: none;
+        }
+        .upload-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .batch-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .result-card {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        .result-card:hover {
+            transform: translateY(-5px);
+        }
+        .result-header {
+            padding: 15px;
+            background: #007bff;
+            color: white;
+        }
+        .result-body {
+            padding: 15px;
+        }
+        .reference-gallery {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            overflow-x: auto;
+        }
+        .reference-image {
+            min-width: 80px;
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 2px solid #ddd;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .reference-image:hover {
+            transform: scale(1.1);
+            border-color: #007bff;
+        }
+        .reference-section {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .reference-title {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .clear-all-btn {
+            margin-top: 10px;
+        }
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            max-width: 100%;
+        }
+        #video, #canvas {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 10px;
+        }
+        .camera-controls {
+            text-align: center;
+            margin: 15px 0;
+        }
+        .camera-preview {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- 模型狀態顯示 -->
+    <div class="model-status">
+        <div class="badge bg-secondary" id="modelStatus">模型載入中...</div>
+    </div>
+
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="row text-center">
+                <div class="col-12">
+                    <h1 class="display-4 mb-4">🎯 STL 物件識別系統</h1>
+                    <p class="lead">多檔案拖拉上傳 • 智能批次識別 • 即時結果分析</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mt-5">
+        <!-- 多檔案上傳區域 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow-lg">
+                    <div class="card-header bg-primary text-white">
+                        <h3><i class="fas fa-cloud-upload-alt"></i> 多檔案上傳識別</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- 拖拉上傳區域 -->
+                        <div class="drop-zone" id="dropZone">
+                            <div class="drop-zone-icon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <h4>拖拉多個圖片到此處</h4>
+                            <p class="text-muted">或點擊選擇檔案 (支援 PNG, JPG, JPEG)</p>
+                            <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
+                            <button class="btn btn-outline-primary mt-3" onclick="document.getElementById('fileInput').click();">
+                                <i class="fas fa-folder-open"></i> 選擇檔案
+                            </button>
+                        </div>
+
+                        <!-- 檔案預覽列表 -->
+                        <div class="file-preview" id="filePreview">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5><i class="fas fa-list"></i> 已選擇的檔案</h5>
+                                <button class="btn btn-outline-danger btn-sm clear-all-btn" onclick="clearAllFiles()">
+                                    <i class="fas fa-trash"></i> 清除全部
+                                </button>
+                            </div>
+                            <div id="fileList"></div>
+                            <button class="btn btn-success btn-lg mt-3" id="uploadBtn" onclick="uploadFiles()" disabled>
+                                <i class="fas fa-rocket"></i> 開始識別 (<span id="fileCount">0</span> 個檔案)
+                            </button>
+                        </div>
+
+                        <!-- 進度條 -->
+                        <div class="progress-container" id="progressContainer">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span>處理進度</span>
+                                <span id="progressText">0%</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- 上傳統計 -->
+                        <div class="upload-stats" id="uploadStats" style="display: none;">
+                            <div class="stat-card">
+                                <div class="stat-number" id="totalFiles">0</div>
+                                <small>總檔案數</small>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number text-success" id="successFiles">0</div>
+                                <small>成功識別</small>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number text-danger" id="failedFiles">0</div>
+                                <small>識別失敗</small>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number text-info" id="avgTime">0ms</div>
+                                <small>平均耗時</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 相機拍照區域 -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="card shadow-lg">
+                    <div class="card-header bg-success text-white">
+                        <h3><i class="fas fa-camera"></i> 相機即時拍照識別</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="video-container">
+                                    <video id="video" autoplay muted style="display: none;"></video>
+                                    <canvas id="canvas" style="display: none;"></canvas>
+                                    <div class="camera-preview" id="cameraPreview">
+                                        <img id="capturedImage" class="img-fluid" style="border-radius: 10px;">
+                                    </div>
+                                    <div class="text-center p-4" id="cameraPlaceholder">
+                                        <i class="fas fa-video fa-5x text-muted mb-3"></i>
+                                        <h5 class="text-muted">點擊下方按鈕啟動相機</h5>
+                                    </div>
+                                </div>
+
+                                <div class="camera-controls">
+                                    <button class="btn btn-primary me-2" id="startCameraBtn" onclick="startCamera()">
+                                        <i class="fas fa-video"></i> 啟動相機
+                                    </button>
+                                    <button class="btn btn-success me-2" id="captureBtn" onclick="capturePhoto()" style="display: none;">
+                                        <i class="fas fa-camera"></i> 拍照
+                                    </button>
+                                    <button class="btn btn-warning me-2" id="retakeBtn" onclick="retakePhoto()" style="display: none;">
+                                        <i class="fas fa-redo"></i> 重拍
+                                    </button>
+                                    <button class="btn btn-danger" id="stopCameraBtn" onclick="stopCamera()" style="display: none;">
+                                        <i class="fas fa-stop"></i> 停止相機
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-6">
+                                <div class="result-container" id="cameraResult" style="display: none;">
+                                    <h5><i class="fas fa-brain"></i> 識別結果</h5>
+                                    <div id="cameraResultContent"></div>
+                                </div>
+
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i>
+                                    <strong>使用說明：</strong>
+                                    <ul class="mb-0 mt-2">
+                                        <li>點擊「啟動相機」開始使用攝像頭</li>
+                                        <li>調整物件位置，確保清晰可見</li>
+                                        <li>點擊「拍照」進行識別</li>
+                                        <li>可以「重拍」或「停止相機」</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 批次結果顯示 -->
+        <div class="batch-results" id="batchResults"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let selectedFiles = [];
+        let videoStream = null;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            checkModelStatus();
+            setupDragAndDrop();
+        });
+
+        // 檢查模型狀態
+        function checkModelStatus() {
+            fetch('/api/model_status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusElement = document.getElementById('modelStatus');
+                    if (data.loaded) {
+                        statusElement.textContent = '模型已載入 ✓';
+                        statusElement.className = 'badge bg-success';
+                    } else {
+                        statusElement.textContent = '模型未載入 ✗';
+                        statusElement.className = 'badge bg-danger';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('modelStatus').textContent = '狀態未知 ?';
+                    document.getElementById('modelStatus').className = 'badge bg-warning';
+                });
+        }
+
+        // 設置拖拉上傳
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+
+            // 防止預設行為
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            // 拖拉進入和離開效果
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('drag-over');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.remove('drag-over');
+                }, false);
+            });
+
+            // 處理文件放置
+            dropZone.addEventListener('drop', handleDrop, false);
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+        }
+
+        // 處理拖拉放置
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            addFiles([...files]);
+        }
+
+        // 處理檔案選擇
+        function handleFileSelect(e) {
+            addFiles([...e.target.files]);
+        }
+
+        // 添加檔案到列表
+        function addFiles(files) {
+            const validFiles = files.filter(file =>
+                file.type.startsWith('image/') &&
+                !selectedFiles.find(f => f.name === file.name && f.size === file.size)
+            );
+
+            selectedFiles.push(...validFiles);
+            updateFilePreview();
+            updateUploadButton();
+        }
+
+        // 更新檔案預覽
+        function updateFilePreview() {
+            const filePreview = document.getElementById('filePreview');
+            const fileList = document.getElementById('fileList');
+
+            if (selectedFiles.length === 0) {
+                filePreview.style.display = 'none';
+                return;
+            }
+
+            filePreview.style.display = 'block';
+            fileList.innerHTML = '';
+
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <i class="fas fa-image"></i>
+                        <div>
+                            <div><strong>${file.name}</strong></div>
+                            <small class="text-muted">${formatFileSize(file.size)}</small>
+                        </div>
+                    </div>
+                    <i class="fas fa-times remove-file" onclick="removeFile(${index})"></i>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        // 更新上傳按鈕
+        function updateUploadButton() {
+            const uploadBtn = document.getElementById('uploadBtn');
+            const fileCount = document.getElementById('fileCount');
+
+            fileCount.textContent = selectedFiles.length;
+            uploadBtn.disabled = selectedFiles.length === 0;
+        }
+
+        // 移除檔案
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFilePreview();
+            updateUploadButton();
+        }
+
+        // 清除所有檔案
+        function clearAllFiles() {
+            selectedFiles = [];
+            updateFilePreview();
+            updateUploadButton();
+            document.getElementById('fileInput').value = '';
+        }
+
+        // 格式化檔案大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 上傳檔案
+        function uploadFiles() {
+            if (selectedFiles.length === 0) return;
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            // 顯示進度條
+            const progressContainer = document.getElementById('progressContainer');
+            const uploadBtn = document.getElementById('uploadBtn');
+
+            progressContainer.style.display = 'block';
+            uploadBtn.disabled = true;
+            updateProgress(0, '開始上傳...');
+
+            // 發送請求
+            fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateProgress(100, '上傳完成!');
+                displayBatchResults(data);
+                showUploadStats(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                updateProgress(0, '上傳失敗');
+                alert('上傳失敗: ' + error.message);
+            })
+            .finally(() => {
+                uploadBtn.disabled = false;
+            });
+        }
+
+        // 更新進度條
+        function updateProgress(percent, text) {
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        // 顯示上傳統計
+        function showUploadStats(data) {
+            const statsContainer = document.getElementById('uploadStats');
+            const avgTime = data.results.reduce((sum, result) =>
+                sum + (result.result ? result.result.inference_time : 0), 0) / data.results.length;
+
+            document.getElementById('totalFiles').textContent = data.total_files;
+            document.getElementById('successFiles').textContent = data.successful_files;
+            document.getElementById('failedFiles').textContent = data.failed_files;
+            document.getElementById('avgTime').textContent = Math.round(avgTime) + 'ms';
+
+            statsContainer.style.display = 'grid';
+        }
+
+        // 顯示批次結果
+        function displayBatchResults(data) {
+            const resultsContainer = document.getElementById('batchResults');
+            resultsContainer.innerHTML = '';
+
+            data.results.forEach((fileResult, index) => {
+                const resultCard = document.createElement('div');
+                resultCard.className = 'result-card';
+
+                let cardContent = `
+                    <div class="result-header">
+                        <h6><i class="fas fa-image"></i> ${fileResult.original_filename}</h6>
+                    </div>
+                    <div class="result-body">
+                `;
+
+                if (fileResult.success && fileResult.result.predictions.length > 0) {
+                    const prediction = fileResult.result.predictions[0];
+                    const confidence = (prediction.confidence * 100).toFixed(1);
+                    const confidenceClass = confidence >= 80 ? 'high-confidence' :
+                                          confidence >= 50 ? 'medium-confidence' : 'low-confidence';
+
+                    cardContent += `
+                        <div class="prediction-item ${confidenceClass}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>${prediction.class_name}</strong>
+                                    <br><small>信心度: ${confidence}%</small>
+                                </div>
+                                <div class="text-end">
+                                    <small>${fileResult.result.inference_time.toFixed(1)}ms</small>
+                                </div>
+                            </div>
+                    `;
+
+                    // 添加參考圖片
+                    if (prediction.reference_images && prediction.reference_images.length > 0) {
+                        cardContent += `
+                            <div class="reference-section">
+                                <div class="reference-title">
+                                    <i class="fas fa-images"></i> 學習參考圖片
+                                </div>
+                                <div class="reference-gallery">
+                        `;
+
+                        prediction.reference_images.forEach(refImg => {
+                            cardContent += `
+                                <img src="${refImg.url}"
+                                     class="reference-image"
+                                     alt="Reference ${refImg.class_name}"
+                                     title="參考圖片: ${refImg.filename}"
+                                     onclick="showLargeImage('${refImg.url}', '${refImg.filename}')">
+                            `;
+                        });
+
+                        cardContent += `
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    cardContent += `</div>`;
+
+                    if (fileResult.result.result_image) {
+                        cardContent += `
+                            <img src="${fileResult.result.result_image}" class="result-image img-fluid" alt="Result">
+                        `;
+                    }
+                } else {
+                    cardContent += `
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            ${fileResult.error || '未偵測到物件'}
+                        </div>
+                    `;
+                }
+
+                cardContent += `</div>`;
+                resultCard.innerHTML = cardContent;
+                resultsContainer.appendChild(resultCard);
+            });
+        }
+
+        // ===== 相機功能 =====
+
+        // 啟動相機
+        async function startCamera() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 }
+                });
+
+                const video = document.getElementById('video');
+                const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+
+                video.srcObject = videoStream;
+                video.style.display = 'block';
+                cameraPlaceholder.style.display = 'none';
+
+                // 更新按鈕狀態
+                document.getElementById('startCameraBtn').style.display = 'none';
+                document.getElementById('captureBtn').style.display = 'inline-block';
+                document.getElementById('stopCameraBtn').style.display = 'inline-block';
+
+                console.log('相機已啟動');
+            } catch (error) {
+                console.error('無法啟動相機:', error);
+                alert('無法啟動相機，請確保已允許相機權限');
+            }
+        }
+
+        // 停止相機
+        function stopCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const cameraPreview = document.getElementById('cameraPreview');
+            const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+            const cameraResult = document.getElementById('cameraResult');
+
+            // 隱藏所有元素
+            video.style.display = 'none';
+            canvas.style.display = 'none';
+            cameraPreview.style.display = 'none';
+            cameraResult.style.display = 'none';
+            cameraPlaceholder.style.display = 'block';
+
+            // 重置按鈕狀態
+            document.getElementById('startCameraBtn').style.display = 'inline-block';
+            document.getElementById('captureBtn').style.display = 'none';
+            document.getElementById('retakeBtn').style.display = 'none';
+            document.getElementById('stopCameraBtn').style.display = 'none';
+
+            console.log('相機已停止');
+        }
+
+        // 拍照
+        function capturePhoto() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+
+            // 設置canvas尺寸
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // 拍攝畫面
+            context.drawImage(video, 0, 0);
+
+            // 顯示拍攝的圖片
+            const capturedImage = document.getElementById('capturedImage');
+            const imageDataUrl = canvas.toDataURL('image/jpeg');
+            capturedImage.src = imageDataUrl;
+
+            // 更新顯示狀態
+            video.style.display = 'none';
+            document.getElementById('cameraPreview').style.display = 'block';
+
+            // 更新按鈕狀態
+            document.getElementById('captureBtn').style.display = 'none';
+            document.getElementById('retakeBtn').style.display = 'inline-block';
+
+            // 進行識別
+            identifyPhoto(imageDataUrl);
+
+            console.log('照片已拍攝');
+        }
+
+        // 重拍
+        function retakePhoto() {
+            const video = document.getElementById('video');
+            const cameraPreview = document.getElementById('cameraPreview');
+            const cameraResult = document.getElementById('cameraResult');
+
+            // 恢復相機顯示
+            video.style.display = 'block';
+            cameraPreview.style.display = 'none';
+            cameraResult.style.display = 'none';
+
+            // 更新按鈕狀態
+            document.getElementById('captureBtn').style.display = 'inline-block';
+            document.getElementById('retakeBtn').style.display = 'none';
+
+            console.log('準備重拍');
+        }
+
+        // 識別拍攝的照片
+        function identifyPhoto(imageDataUrl) {
+            const cameraResult = document.getElementById('cameraResult');
+            const cameraResultContent = document.getElementById('cameraResultContent');
+
+            // 顯示載入狀態
+            cameraResultContent.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">識別中...</span>
+                    </div>
+                    <p class="mt-2">正在識別中...</p>
+                </div>
+            `;
+            cameraResult.style.display = 'block';
+
+            // 發送到後端識別
+            fetch('/api/camera_capture', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image: imageDataUrl })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.result.predictions.length > 0) {
+                    const prediction = data.result.predictions[0];
+                    const confidence = (prediction.confidence * 100).toFixed(1);
+                    const confidenceClass = confidence >= 80 ? 'high-confidence' :
+                                          confidence >= 50 ? 'medium-confidence' : 'low-confidence';
+
+                    let resultHTML = `
+                        <div class="prediction-item ${confidenceClass}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5><i class="fas fa-cube"></i> ${prediction.class_name}</h5>
+                                    <p class="mb-0">信心度: <strong>${confidence}%</strong></p>
+                                    <small class="text-muted">處理時間: ${data.result.inference_time.toFixed(1)}ms</small>
+                                </div>
+                                <div class="text-end">
+                                    <i class="fas fa-check-circle fa-2x text-success"></i>
+                                </div>
+                            </div>
+                    `;
+
+                    // 添加參考圖片
+                    if (prediction.reference_images && prediction.reference_images.length > 0) {
+                        resultHTML += `
+                            <div class="reference-section">
+                                <div class="reference-title">
+                                    <i class="fas fa-images"></i> 學習參考圖片
+                                </div>
+                                <div class="reference-gallery">
+                        `;
+
+                        prediction.reference_images.forEach(refImg => {
+                            resultHTML += `
+                                <img src="${refImg.url}"
+                                     class="reference-image"
+                                     alt="Reference ${refImg.class_name}"
+                                     title="參考圖片: ${refImg.filename}"
+                                     onclick="showLargeImage('${refImg.url}', '${refImg.filename}')">
+                            `;
+                        });
+
+                        resultHTML += `
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    resultHTML += `</div>`;
+                    cameraResultContent.innerHTML = resultHTML;
+
+                    if (data.result.result_image) {
+                        cameraResultContent.innerHTML += `
+                            <div class="text-center mt-3">
+                                <img src="${data.result.result_image}" class="img-fluid"
+                                     style="max-width: 300px; border-radius: 8px;" alt="識別結果">
+                            </div>
+                        `;
+                    }
+                } else {
+                    cameraResultContent.innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>未偵測到物件</strong>
+                            <p class="mb-0">請調整物件位置或重新拍攝</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('識別錯誤:', error);
+                cameraResultContent.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <strong>識別失敗</strong>
+                        <p class="mb-0">${error.message}</p>
+                    </div>
+                `;
+            });
+        }
+
+        // 顯示大圖片的模態窗口
+        function showLargeImage(imageUrl, filename) {
+            // 創建模態窗口
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.id = 'imageModal';
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-image"></i> 參考圖片: ${filename}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body text-center">
+                            <img src="${imageUrl}" class="img-fluid" style="max-height: 70vh; border-radius: 8px;">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 移除舊的模態窗口
+            const existingModal = document.getElementById('imageModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // 添加到頁面並顯示
+            document.body.appendChild(modal);
+            const bootstrapModal = new bootstrap.Modal(modal);
+            bootstrapModal.show();
+
+            // 模態窗口關閉後移除
+            modal.addEventListener('hidden.bs.modal', () => {
+                modal.remove();
+            });
+        }
+    </script>
+</body>
+</html>

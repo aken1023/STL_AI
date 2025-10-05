@@ -1,0 +1,2085 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>昭瀚 珠寶辨識系統 - 完整測試介面 v1.1</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 0;
+        }
+        .feature-card {
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+            height: 100%;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        .result-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .prediction-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+        }
+        .high-confidence { border-left-color: #28a745; }
+        .medium-confidence { border-left-color: #ffc107; }
+        .low-confidence { border-left-color: #dc3545; }
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #video, #canvas {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+        }
+        .sample-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .sample-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .sample-item:hover {
+            transform: scale(1.05);
+        }
+        .sample-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }
+        .model-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .loading {
+            display: none;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .result-image {
+            max-width: 400px;
+            max-height: 300px;
+            border-radius: 8px;
+            margin: 15px 0;
+            object-fit: contain;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .comparison-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .similar-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .similar-item {
+            text-align: center;
+            background: white;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .similar-item img {
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .similarity-score {
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        /* 拖放區域樣式 */
+        .drop-zone {
+            border: 3px dashed #007bff;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .drop-zone:hover {
+            background: #e9ecef;
+            border-color: #0056b3;
+        }
+
+        .drop-zone.drag-over {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            border-style: solid;
+            transform: scale(1.02);
+        }
+
+        .drop-zone.has-file {
+            background: #d4edda;
+            border-color: #28a745;
+            border-style: solid;
+        }
+
+        .drop-zone-icon {
+            font-size: 48px;
+            color: #007bff;
+            margin-bottom: 20px;
+        }
+
+        .drop-zone.drag-over .drop-zone-icon {
+            color: #2196f3;
+            animation: bounce 0.5s ease;
+        }
+
+        .drop-zone.has-file .drop-zone-icon {
+            color: #28a745;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .file-preview {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .file-preview.show {
+            display: block;
+        }
+
+        .files-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .file-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .file-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .file-item .file-name {
+            font-size: 12px;
+            color: #666;
+            word-break: break-all;
+            margin-bottom: 5px;
+        }
+
+        .file-item .file-size {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .file-item .remove-file {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .batch-controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .progress-container {
+            margin-top: 15px;
+            display: none;
+        }
+
+        .progress-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .progress-item.processing {
+            background: #fff3cd;
+        }
+
+        .progress-item.completed {
+            background: #d1edff;
+        }
+
+        .progress-item.error {
+            background: #f8d7da;
+        }
+
+        /* 手機 RWD 優化 */
+        @media (max-width: 768px) {
+            .hero-section {
+                padding: 30px 0;
+            }
+
+            .hero-section h1 {
+                font-size: 2rem;
+            }
+
+            .hero-section .lead {
+                font-size: 1rem;
+            }
+
+            .drop-zone {
+                padding: 20px;
+                margin: 10px 0;
+            }
+
+            .drop-zone-icon {
+                font-size: 36px;
+            }
+
+            .drop-zone h4 {
+                font-size: 1.2rem;
+            }
+
+            .files-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 10px;
+            }
+
+            .file-item {
+                padding: 10px;
+            }
+
+            .file-item img {
+                height: 120px;
+            }
+
+            .batch-controls {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 15px;
+            }
+
+            .batch-controls .btn {
+                width: 100%;
+            }
+
+            .similar-images {
+                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+                gap: 10px;
+            }
+
+            .similar-item img {
+                width: 80px;
+                height: 80px;
+            }
+
+            .result-image {
+                max-width: 100%;
+                max-height: 200px;
+            }
+
+            .prediction-item {
+                padding: 10px;
+                font-size: 14px;
+            }
+
+            .model-status {
+                position: static;
+                margin: 10px;
+                text-align: center;
+            }
+
+            .nav-tabs .nav-link {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+
+            .card-body {
+                padding: 15px;
+            }
+
+            .progress-item {
+                font-size: 14px;
+                padding: 8px;
+            }
+
+            .progress-item span {
+                word-break: break-all;
+            }
+
+            /* 觸摸友善的按鈕 */
+            .btn {
+                min-height: 44px;
+                padding: 12px 16px;
+            }
+
+            .btn-sm {
+                min-height: 36px;
+                padding: 8px 12px;
+            }
+
+            /* 改善表單控制項 */
+            .form-check {
+                margin: 10px 0;
+            }
+
+            .form-check-input {
+                width: 20px;
+                height: 20px;
+            }
+
+            .form-check-label {
+                font-size: 16px;
+                padding-left: 8px;
+            }
+
+            /* 改善標籤頁 */
+            .nav-tabs {
+                flex-wrap: wrap;
+            }
+
+            .nav-tabs .nav-item {
+                margin-bottom: 2px;
+            }
+        }
+
+        /* 超小螢幕優化 */
+        @media (max-width: 480px) {
+            .files-grid {
+                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            }
+
+            .hero-section .row > div {
+                margin-bottom: 20px;
+            }
+
+            .nav-tabs .nav-link {
+                padding: 6px 8px;
+                font-size: 12px;
+            }
+
+            .result-container {
+                padding: 15px;
+            }
+
+            .similar-images {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .prediction-item {
+                padding: 8px;
+                font-size: 13px;
+            }
+
+            .batch-controls .form-check {
+                margin: 15px 0;
+            }
+        }
+
+        /* 觸摸設備優化 */
+        @media (hover: none) and (pointer: coarse) {
+            .drop-zone {
+                border-width: 4px;
+                padding: 25px;
+            }
+
+            .file-item .remove-file {
+                width: 30px;
+                height: 30px;
+                font-size: 14px;
+            }
+
+            .sample-item:hover {
+                transform: none;
+            }
+
+            .feature-card:hover {
+                transform: none;
+            }
+
+            /* 改善點擊區域 */
+            .nav-link {
+                padding: 15px 20px;
+            }
+
+            .btn {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 模型狀態指示器 -->
+    <div class="model-status" id="modelStatus">
+        <div class="badge bg-warning">
+            <i class="fas fa-spinner fa-spin"></i> 載入模型中...
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <h1 class="display-4 fw-bold mb-3">
+                <i class="fas fa-gem"></i> 昭瀚 珠寶辨識系統
+            </h1>
+            <p class="lead">FAISS ResNet50 深度學習模型 - 即時物件辨識</p>
+
+            <div class="row mt-4">
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <i class="fas fa-database fa-2x mb-2"></i>
+                        <p>4 個 STL 類別</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <i class="fas fa-images fa-2x mb-2"></i>
+                        <p>1,323 訓練圖片</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <i class="fas fa-brain fa-2x mb-2"></i>
+                        <p>FAISS ResNet50 模型</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <i class="fas fa-bolt fa-2x mb-2"></i>
+                        <p>即時推論</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主要內容 -->
+    <div class="container my-5">
+        <!-- 功能標籤 -->
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button">
+                    <i class="fas fa-upload"></i> 檔案上傳
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="camera-tab" data-bs-toggle="tab" data-bs-target="#camera" type="button">
+                    <i class="fas fa-camera"></i> 相機拍照
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="samples-tab" data-bs-toggle="tab" data-bs-target="#samples" type="button">
+                    <i class="fas fa-images"></i> 樣本測試
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="performance-tab" data-bs-toggle="tab" data-bs-target="#performance" type="button">
+                    <i class="fas fa-tachometer-alt"></i> 效能測試
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="batch-tab" data-bs-toggle="tab" data-bs-target="#batch" type="button">
+                    <i class="fas fa-chart-bar"></i> 批次測試
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="training-tab" data-bs-toggle="tab" data-bs-target="#training" type="button">
+                    <i class="fas fa-cogs"></i> 模型訓練
+                </button>
+            </li>
+        </ul>
+
+        <!-- 功能內容 -->
+        <div class="tab-content" id="myTabContent">
+            <!-- 檔案上傳 -->
+            <div class="tab-pane fade show active" id="upload" role="tabpanel">
+                <div class="card feature-card mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-upload text-primary"></i> 上傳圖片進行識別
+                        </h5>
+                        <p class="card-text">支援 JPG、PNG 格式，可以拖拉檔案或點擊選擇</p>
+
+                        <!-- 拖放區域 -->
+                        <div class="drop-zone" id="dropZone">
+                            <i class="fas fa-cloud-upload-alt drop-zone-icon"></i>
+                            <h4>拖放圖片到這裡</h4>
+                            <p class="text-muted mb-3">或</p>
+                            <input type="file" id="fileInput" accept="image/*" multiple class="d-none">
+                            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                                <i class="fas fa-folder-open"></i> 選擇檔案
+                            </button>
+                            <p class="text-muted mt-2">支援 JPG、PNG、JPEG 格式 | 可以選擇多個檔案</p>
+                        </div>
+
+                        <!-- 檔案預覽 -->
+                        <div class="file-preview" id="filePreview">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6><i class="fas fa-images"></i> 已選擇的圖片 (<span id="fileCount">0</span>)</h6>
+                                <button class="btn btn-outline-danger btn-sm" onclick="clearAllFiles()">
+                                    <i class="fas fa-trash"></i> 清空全部
+                                </button>
+                            </div>
+                            <div class="files-grid" id="filesGrid"></div>
+
+                            <div class="batch-controls">
+                                <button class="btn btn-success btn-lg" onclick="uploadAllFiles()" id="uploadAllBtn">
+                                    <i class="fas fa-search"></i> 批次識別 (<span id="uploadCount">0</span> 張圖片)
+                                </button>
+                                <div class="form-check ms-3">
+                                    <input class="form-check-input" type="checkbox" id="showSimilarImages" checked>
+                                    <label class="form-check-label" for="showSimilarImages">
+                                        顯示相似圖片
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="progress-container" id="progressContainer">
+                                <h6><i class="fas fa-tasks"></i> 處理進度</h6>
+                                <div id="progressList"></div>
+                            </div>
+                        </div>
+
+                        <div class="loading mt-3" id="uploadLoading">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">
+                                    處理中...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="uploadResult"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 相機拍照 -->
+            <div class="tab-pane fade" id="camera" role="tabpanel">
+                <div class="card feature-card mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-camera text-success"></i> 相機即時拍照識別
+                        </h5>
+                        <p class="card-text">使用電腦相機拍照進行即時識別</p>
+
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="video-container">
+                                    <video id="video" autoplay style="display: none;"></video>
+                                    <canvas id="canvas" style="display: none;"></canvas>
+                                    <div id="cameraPlaceholder" class="text-center p-5">
+                                        <i class="fas fa-camera" style="font-size: 64px; color: #ccc;"></i>
+                                        <p class="mt-3">點擊下方按鈕啟動相機</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-success" onclick="startCamera()">
+                                        <i class="fas fa-video"></i> 啟動相機
+                                    </button>
+                                    <button class="btn btn-primary" onclick="capturePhoto()" disabled id="captureBtn">
+                                        <i class="fas fa-camera"></i> 拍照識別
+                                    </button>
+                                    <button class="btn btn-secondary" onclick="stopCamera()" disabled id="stopBtn">
+                                        <i class="fas fa-stop"></i> 停止相機
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="loading mt-3" id="cameraLoading">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">
+                                    識別中...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="cameraResult"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 樣本測試 -->
+            <div class="tab-pane fade" id="samples" role="tabpanel">
+                <div class="card feature-card mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-images text-info"></i> 數據集樣本測試
+                        </h5>
+                        <p class="card-text">測試訓練數據集中的樣本圖片</p>
+
+                        <button class="btn btn-info" onclick="loadSamples()">
+                            <i class="fas fa-sync"></i> 載入樣本
+                        </button>
+
+                        <div class="loading mt-3" id="samplesLoading">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">
+                                    載入樣本中...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="samplesGrid" class="sample-grid"></div>
+                        <div id="sampleResult"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 效能測試 -->
+            <div class="tab-pane fade" id="performance" role="tabpanel">
+                <div class="card feature-card mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-tachometer-alt text-warning"></i> 模型效能測試
+                        </h5>
+                        <p class="card-text">測試模型的推論速度和效能</p>
+
+                        <button class="btn btn-warning" onclick="testPerformance()">
+                            <i class="fas fa-play"></i> 開始測試
+                        </button>
+
+                        <div class="loading mt-3" id="performanceLoading">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">
+                                    測試中...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="performanceResult"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 批次測試 -->
+            <div class="tab-pane fade" id="batch" role="tabpanel">
+                <div class="card feature-card mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-chart-bar text-danger"></i> 批次準確率測試
+                        </h5>
+                        <p class="card-text">測試整體數據集的準確率</p>
+
+                        <button class="btn btn-danger" onclick="batchTest()">
+                            <i class="fas fa-play"></i> 開始批次測試
+                        </button>
+
+                        <div class="loading mt-3" id="batchLoading">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%">
+                                    批次測試中...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="batchResult"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模型訓練 -->
+            <div class="tab-pane fade" id="training" role="tabpanel">
+                <div class="card feature-card mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-cogs text-success"></i> 自定義模型訓練
+                        </h5>
+                        <p class="card-text">上傳STL檔案來訓練新的識別模型</p>
+
+                        <!-- STL檔案上傳區域 -->
+                        <div class="drop-zone" id="stlDropZone" style="border-color: #28a745;">
+                            <i class="fas fa-cube drop-zone-icon" style="color: #28a745;"></i>
+                            <h4>拖放STL檔案到這裡</h4>
+                            <p class="text-muted mb-3">或</p>
+                            <input type="file" id="stlFileInput" accept=".stl" multiple class="d-none">
+                            <button class="btn btn-success" onclick="document.getElementById('stlFileInput').click()">
+                                <i class="fas fa-folder-open"></i> 選擇STL檔案
+                            </button>
+                            <p class="text-muted mt-2">支援 STL 格式 | 可以選擇多個檔案</p>
+                        </div>
+
+                        <!-- STL檔案預覽 -->
+                        <div class="file-preview" id="stlFilePreview">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6><i class="fas fa-cube"></i> 已選擇的STL檔案 (<span id="stlFileCount">0</span>)</h6>
+                                <button class="btn btn-outline-danger btn-sm" onclick="clearAllStlFiles()">
+                                    <i class="fas fa-trash"></i> 清空全部
+                                </button>
+                            </div>
+                            <div class="files-grid" id="stlFilesGrid"></div>
+
+                            <!-- 訓練設定 -->
+                            <div class="mt-4">
+                                <h6><i class="fas fa-sliders-h"></i> 訓練設定</h6>
+
+                                <!-- 訓練模式選擇 -->
+                                <div class="mb-4">
+                                    <label class="form-label"><i class="fas fa-rocket"></i> 訓練模式</label>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="card border-primary h-100" style="cursor: pointer;" onclick="selectTrainingMode('normal')">
+                                                <div class="card-body text-center">
+                                                    <input type="radio" name="trainingMode" id="normalMode" value="normal" checked class="form-check-input mb-2">
+                                                    <h6 class="text-primary"><i class="fas fa-tachometer-alt"></i> 正常訓練</h6>
+                                                    <p class="text-muted small mb-1">⏱️ 時間較短 (約30-60分鐘)</p>
+                                                    <p class="text-muted small mb-1">📊 50 輪訓練 + 180張圖片</p>
+                                                    <p class="text-muted small">💡 適合快速驗證和原型測試</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="card border-success h-100" style="cursor: pointer;" onclick="selectTrainingMode('precision')">
+                                                <div class="card-body text-center">
+                                                    <input type="radio" name="trainingMode" id="precisionMode" value="precision" class="form-check-input mb-2">
+                                                    <h6 class="text-success"><i class="fas fa-crosshairs"></i> 精準訓練</h6>
+                                                    <p class="text-muted small mb-1">⏱️ 時間較長 (約2-4小時)</p>
+                                                    <p class="text-muted small mb-1">📊 100 輪訓練 + 360張圖片</p>
+                                                    <p class="text-muted small">🎯 適合生產環境和高精度需求</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="trainEpochs" class="form-label">訓練輪數 (Epochs)</label>
+                                            <input type="number" class="form-control" id="trainEpochs" value="50" min="10" max="200">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="batchSize" class="form-label">批次大小 (Batch Size)</label>
+                                            <select class="form-control" id="batchSize">
+                                                <option value="4">4 (推薦-CPU)</option>
+                                                <option value="8">8</option>
+                                                <option value="16">16 (需要GPU)</option>
+                                                <option value="32">32 (需要GPU)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="imageSize" class="form-label">圖片大小</label>
+                                            <select class="form-control" id="imageSize">
+                                                <option value="416">416x416 (推薦)</option>
+                                                <option value="512">512x512</option>
+                                                <option value="640">640x640</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="imagesPerModel" class="form-label">每個模型生成圖片數量</label>
+                                            <input type="number" class="form-control" id="imagesPerModel" value="360" min="50" max="500">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 訓練控制 -->
+                            <div class="batch-controls">
+                                <button class="btn btn-success btn-lg" onclick="startTraining()" id="startTrainingBtn">
+                                    <i class="fas fa-play"></i> 開始訓練 (<span id="stlTrainCount">0</span> 個STL檔案)
+                                </button>
+                                <button class="btn btn-danger btn-lg" onclick="stopTraining()" id="stopTrainingBtn" style="display: none;">
+                                    <i class="fas fa-stop"></i> 停止訓練
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 訓練進度 -->
+                        <div class="progress-container" id="trainingProgressContainer" style="display: none;">
+                            <h6><i class="fas fa-spinner fa-spin"></i> 訓練進度</h6>
+
+                            <!-- 整體進度 -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span>整體進度</span>
+                                    <span id="overallProgress">0%</span>
+                                </div>
+                                <div class="progress mb-2">
+                                    <div class="progress-bar" id="overallProgressBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- 當前階段 -->
+                            <div class="alert alert-info" id="currentStage">
+                                <strong>準備中...</strong>
+                            </div>
+
+                            <!-- 詳細進度 -->
+                            <div id="detailedProgress"></div>
+
+                            <!-- 訓練日誌 -->
+                            <div class="mt-3">
+                                <h6><i class="fas fa-terminal"></i> 訓練日誌</h6>
+                                <div class="bg-dark text-light p-3" style="max-height: 300px; overflow-y: auto; font-family: monospace;" id="trainingLog">
+                                    等待訓練開始...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="trainingResult"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let stream = null;
+        let selectedFiles = [];
+        let selectedStlFiles = [];
+        let trainingInterval = null;
+        let currentTrainingId = null;
+
+        // 初始化拖放功能
+        function initDragDrop() {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+
+            // STL拖放功能
+            const stlDropZone = document.getElementById('stlDropZone');
+            const stlFileInput = document.getElementById('stlFileInput');
+
+            // 防止瀏覽器預設行為
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+                stlDropZone.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            // 拖放視覺效果
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, highlight, false);
+                stlDropZone.addEventListener(eventName, highlightStl, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, unhighlight, false);
+                stlDropZone.addEventListener(eventName, unhighlightStl, false);
+            });
+
+            function highlight(e) {
+                dropZone.classList.add('drag-over');
+            }
+
+            function unhighlight(e) {
+                dropZone.classList.remove('drag-over');
+            }
+
+            function highlightStl(e) {
+                stlDropZone.classList.add('drag-over');
+            }
+
+            function unhighlightStl(e) {
+                stlDropZone.classList.remove('drag-over');
+            }
+
+            // 處理檔案放置
+            dropZone.addEventListener('drop', handleDrop, false);
+            stlDropZone.addEventListener('drop', handleStlDrop, false);
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+
+                handleMultipleFiles(files);
+            }
+
+            function handleStlDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+
+                handleMultipleStlFiles(files);
+            }
+
+            // 處理檔案選擇
+            fileInput.addEventListener('change', function(e) {
+                handleMultipleFiles(this.files);
+            });
+
+            stlFileInput.addEventListener('change', function(e) {
+                handleMultipleStlFiles(this.files);
+            });
+        }
+
+        // 處理多個檔案
+        function handleMultipleFiles(files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+
+                // 檢查檔案類型
+                if (!file.type.startsWith('image/')) {
+                    alert(`檔案 ${file.name} 不是圖片格式，已跳過`);
+                    continue;
+                }
+
+                // 檢查是否已存在
+                const exists = selectedFiles.some(f => f.name === file.name && f.size === file.size);
+                if (exists) {
+                    alert(`檔案 ${file.name} 已存在，已跳過`);
+                    continue;
+                }
+
+                // 添加到選中的檔案列表
+                selectedFiles.push(file);
+            }
+
+            updateFilePreview();
+        }
+
+        // 更新檔案預覽
+        function updateFilePreview() {
+            const filePreview = document.getElementById('filePreview');
+            const filesGrid = document.getElementById('filesGrid');
+            const fileCount = document.getElementById('fileCount');
+            const uploadCount = document.getElementById('uploadCount');
+
+            if (selectedFiles.length === 0) {
+                filePreview.classList.remove('show');
+                document.getElementById('dropZone').classList.remove('has-file');
+                return;
+            }
+
+            filePreview.classList.add('show');
+            document.getElementById('dropZone').classList.add('has-file');
+
+            fileCount.textContent = selectedFiles.length;
+            uploadCount.textContent = selectedFiles.length;
+
+            // 清空網格
+            filesGrid.innerHTML = '';
+
+            // 為每個檔案創建預覽卡片
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    fileItem.innerHTML = `
+                        <button class="remove-file" onclick="removeFile(${index})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <img src="${e.target.result}" alt="${file.name}">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${formatFileSize(file.size)}</div>
+                    `;
+                };
+                reader.readAsDataURL(file);
+
+                filesGrid.appendChild(fileItem);
+            });
+        }
+
+        // 移除單個檔案
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFilePreview();
+        }
+
+        // 清除所有檔案
+        function clearAllFiles() {
+            selectedFiles = [];
+            document.getElementById('fileInput').value = '';
+            updateFilePreview();
+            document.getElementById('uploadResult').innerHTML = '';
+            document.getElementById('progressContainer').style.display = 'none';
+        }
+
+        // 格式化檔案大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // 檢查模型狀態
+        async function checkModelStatus() {
+            try {
+                const response = await fetch('/api/model_status');
+                const data = await response.json();
+
+                const statusDiv = document.getElementById('modelStatus');
+                if (data.loaded) {
+                    statusDiv.innerHTML = `
+                        <div class="badge bg-success">
+                            <i class="fas fa-check-circle"></i> 模型已載入
+                        </div>
+                        <div class="small mt-1">
+                            ${data.info.size} | ${data.info.classes.length} 類別
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="badge bg-danger">
+                            <i class="fas fa-times-circle"></i> 模型未載入
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('檢查模型狀態失敗:', error);
+            }
+        }
+
+        // 批次上傳檔案
+        async function uploadAllFiles() {
+            if (selectedFiles.length === 0) {
+                alert('請先選擇檔案！');
+                return;
+            }
+
+            const progressContainer = document.getElementById('progressContainer');
+            const progressList = document.getElementById('progressList');
+            const uploadAllBtn = document.getElementById('uploadAllBtn');
+            const showSimilarImages = document.getElementById('showSimilarImages').checked;
+
+            progressContainer.style.display = 'block';
+            progressList.innerHTML = '';
+            uploadAllBtn.disabled = true;
+            document.getElementById('uploadResult').innerHTML = '';
+
+            let results = [];
+
+            // 逐個處理檔案
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+
+                // 創建進度項目
+                const progressItem = document.createElement('div');
+                progressItem.className = 'progress-item processing';
+                progressItem.id = `progress-${i}`;
+                progressItem.innerHTML = `
+                    <span>${file.name}</span>
+                    <span><i class="fas fa-spinner fa-spin"></i> 處理中...</span>
+                `;
+                progressList.appendChild(progressItem);
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        progressItem.className = 'progress-item completed';
+                        progressItem.innerHTML = `
+                            <span>${file.name}</span>
+                            <span><i class="fas fa-check text-success"></i> 完成</span>
+                        `;
+                        results.push({
+                            filename: file.name,
+                            result: data.result,
+                            success: true
+                        });
+                    } else {
+                        progressItem.className = 'progress-item error';
+                        progressItem.innerHTML = `
+                            <span>${file.name}</span>
+                            <span><i class="fas fa-times text-danger"></i> 失敗: ${data.error}</span>
+                        `;
+                        results.push({
+                            filename: file.name,
+                            error: data.error,
+                            success: false
+                        });
+                    }
+                } catch (error) {
+                    progressItem.className = 'progress-item error';
+                    progressItem.innerHTML = `
+                        <span>${file.name}</span>
+                        <span><i class="fas fa-times text-danger"></i> 錯誤: ${error}</span>
+                    `;
+                    results.push({
+                        filename: file.name,
+                        error: error.toString(),
+                        success: false
+                    });
+                }
+
+                // 短暫延遲避免伺服器過載
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            // 顯示匯總結果
+            displayBatchResults(results, showSimilarImages);
+            uploadAllBtn.disabled = false;
+        }
+
+        // 顯示識別結果
+        function displayResult(containerId, result) {
+            const container = document.getElementById(containerId);
+
+            if (!result.predictions || result.predictions.length === 0) {
+                container.innerHTML = `
+                    <div class="result-container">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i> 未偵測到物件
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '<div class="result-container">';
+            html += '<h5><i class="fas fa-poll"></i> 識別結果</h5>';
+
+            // 顯示結果圖片（已縮小尺寸）
+            if (result.result_image) {
+                html += `<div class="text-center">
+                    <img src="${result.result_image}" class="result-image" alt="識別結果">
+                </div>`;
+            }
+
+            // 顯示預測結果
+            result.predictions.forEach((pred, index) => {
+                const confidence = (pred.confidence * 100).toFixed(1);
+                let confidenceClass = 'low-confidence';
+                if (confidence > 80) confidenceClass = 'high-confidence';
+                else if (confidence > 60) confidenceClass = 'medium-confidence';
+
+                html += `
+                    <div class="prediction-item ${confidenceClass}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>#${index + 1} ${pred.class_name}</strong>
+                            </div>
+                            <div>
+                                <span class="badge bg-primary">${confidence}%</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // 顯示推論時間
+            if (result.inference_time) {
+                html += `
+                    <div class="mt-3 text-muted">
+                        <i class="fas fa-clock"></i> 推論時間: ${result.inference_time.toFixed(1)}ms
+                    </div>
+                `;
+            }
+
+            // 顯示背景複雜度分析
+            if (result.background_analysis) {
+                const analysis = result.background_analysis;
+                const alertClass = analysis.is_complex ? 'alert-warning' : 'alert-success';
+                const iconClass = analysis.is_complex ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
+
+                html += `
+                    <div class="alert ${alertClass} mt-3">
+                        <div class="d-flex align-items-center">
+                            <i class="${iconClass} me-2"></i>
+                            <div>
+                                <strong>背景分析：</strong>${analysis.recommendation}<br>
+                                <small>複雜度評分: ${analysis.complexity_score} |
+                                邊緣密度: ${analysis.edge_density} |
+                                顏色變化: ${analysis.color_variance}</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 顯示最相似的訓練圖片
+            if (result.similar_images && result.similar_images.length > 0) {
+                html += `
+                    <div class="comparison-section">
+                        <h6><i class="fas fa-search"></i> 最相似的訓練圖片</h6>
+                        <div class="similar-images">
+                `;
+
+                result.similar_images.forEach((img, index) => {
+                    const similarity = (img.similarity * 100).toFixed(1);
+                    html += `
+                        <div class="similar-item">
+                            <img src="${img.url}" alt="${img.class_name}">
+                            <div>
+                                <small class="text-muted">${img.class_name}</small><br>
+                                <span class="similarity-score">${similarity}% 相似</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                        <small class="text-muted mt-2 d-block">
+                            <i class="fas fa-info-circle"></i> 使用HOG特徵和餘弦相似度計算
+                        </small>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // 顯示批次結果
+        function displayBatchResults(results, showSimilarImages) {
+            const container = document.getElementById('uploadResult');
+            const successfulResults = results.filter(r => r.success);
+            const failedResults = results.filter(r => !r.success);
+
+            let html = '<div class="result-container">';
+            html += `<h5><i class="fas fa-chart-bar"></i> 批次處理結果</h5>`;
+
+            // 統計資訊
+            html += `
+                <div class="alert alert-info">
+                    <strong>處理完成！</strong>
+                    成功: ${successfulResults.length} 張 |
+                    失敗: ${failedResults.length} 張 |
+                    總計: ${results.length} 張圖片
+                </div>
+            `;
+
+            // 顯示成功的結果
+            if (successfulResults.length > 0) {
+                html += '<h6 class="mt-4"><i class="fas fa-check-circle text-success"></i> 成功識別的圖片</h6>';
+
+                successfulResults.forEach((item, index) => {
+                    const result = item.result;
+                    html += '<div class="mb-4 p-3" style="border: 1px solid #ddd; border-radius: 8px;">';
+                    html += `<h6 class="text-primary">${item.filename}</h6>`;
+
+                    // 顯示結果圖片
+                    if (result.result_image) {
+                        html += `<div class="text-center mb-3">
+                            <img src="${result.result_image}" class="result-image" alt="識別結果" style="max-width: 300px;">
+                        </div>`;
+                    }
+
+                    // 顯示預測結果
+                    if (result.predictions && result.predictions.length > 0) {
+                        result.predictions.forEach((pred, predIndex) => {
+                            const confidence = (pred.confidence * 100).toFixed(1);
+                            let confidenceClass = 'low-confidence';
+                            if (confidence > 80) confidenceClass = 'high-confidence';
+                            else if (confidence > 60) confidenceClass = 'medium-confidence';
+
+                            html += `
+                                <div class="prediction-item ${confidenceClass} mb-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div><strong>#${predIndex + 1} ${pred.class_name}</strong></div>
+                                        <div><span class="badge bg-primary">${confidence}%</span></div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+
+                        // 顯示推論時間
+                        if (result.inference_time) {
+                            html += `<small class="text-muted"><i class="fas fa-clock"></i> 推論時間: ${result.inference_time.toFixed(1)}ms</small>`;
+                        }
+
+                        // 顯示相似圖片（如果啟用）
+                        if (showSimilarImages && result.similar_images && result.similar_images.length > 0) {
+                            html += `
+                                <div class="mt-3">
+                                    <small class="text-muted"><i class="fas fa-search"></i> 最相似的訓練圖片:</small>
+                                    <div class="row mt-2">
+                            `;
+
+                            result.similar_images.forEach((img, imgIndex) => {
+                                const similarity = (img.similarity * 100).toFixed(1);
+                                html += `
+                                    <div class="col-4">
+                                        <div class="text-center">
+                                            <img src="${img.url}" class="img-thumbnail" style="width: 80px; height: 80px; object-fit: cover;">
+                                            <div><small class="text-muted">${img.class_name}</small></div>
+                                            <div><small>${similarity}%</small></div>
+                                        </div>
+                                    </div>
+                                `;
+                            });
+
+                            html += '</div></div>';
+                        }
+                    }
+
+                    html += '</div>';
+                });
+            }
+
+            // 顯示失敗的結果
+            if (failedResults.length > 0) {
+                html += '<h6 class="mt-4"><i class="fas fa-exclamation-triangle text-warning"></i> 處理失敗的圖片</h6>';
+                failedResults.forEach(item => {
+                    html += `
+                        <div class="alert alert-warning">
+                            <strong>${item.filename}</strong><br>
+                            錯誤: ${item.error}
+                        </div>
+                    `;
+                });
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // 相機功能
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                video.style.display = 'block';
+                document.getElementById('cameraPlaceholder').style.display = 'none';
+                document.getElementById('captureBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = false;
+            } catch (error) {
+                alert('無法啟動相機: ' + error);
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            document.getElementById('video').style.display = 'none';
+            document.getElementById('cameraPlaceholder').style.display = 'block';
+            document.getElementById('captureBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = true;
+        }
+
+        async function capturePhoto() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0);
+
+            canvas.toBlob(async (blob) => {
+                const reader = new FileReader();
+                reader.onloadend = async function() {
+                    document.getElementById('cameraLoading').style.display = 'block';
+
+                    try {
+                        const response = await fetch('/api/camera_capture', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                image: reader.result
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            displayResult('cameraResult', data.result);
+                        } else {
+                            alert('識別失敗: ' + data.error);
+                        }
+                    } catch (error) {
+                        alert('拍照失敗: ' + error);
+                    } finally {
+                        document.getElementById('cameraLoading').style.display = 'none';
+                    }
+                };
+                reader.readAsDataURL(blob);
+            }, 'image/jpeg');
+        }
+
+        // 載入樣本
+        async function loadSamples() {
+            document.getElementById('samplesLoading').style.display = 'block';
+
+            try {
+                const response = await fetch('/api/dataset_samples');
+                const data = await response.json();
+
+                const grid = document.getElementById('samplesGrid');
+                grid.innerHTML = '';
+
+                data.samples.forEach(sample => {
+                    const div = document.createElement('div');
+                    div.className = 'sample-item';
+                    div.innerHTML = `
+                        <img src="${sample.url}" alt="${sample.class_name}">
+                        <div class="p-2">
+                            <small class="text-muted">${sample.class_name}</small>
+                        </div>
+                    `;
+                    div.onclick = () => testSample(sample.class_name, sample.filename);
+                    grid.appendChild(div);
+                });
+            } catch (error) {
+                alert('載入樣本失敗: ' + error);
+            } finally {
+                document.getElementById('samplesLoading').style.display = 'none';
+            }
+        }
+
+        // 測試樣本
+        async function testSample(className, filename) {
+            try {
+                const response = await fetch(`/api/test_sample/${className}/${filename}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResult('sampleResult', data.result);
+                } else {
+                    alert('測試失敗: ' + data.error);
+                }
+            } catch (error) {
+                alert('測試樣本失敗: ' + error);
+            }
+        }
+
+        // 效能測試
+        async function testPerformance() {
+            document.getElementById('performanceLoading').style.display = 'block';
+
+            try {
+                const response = await fetch('/api/performance_test');
+                const data = await response.json();
+
+                if (data.success) {
+                    const resultDiv = document.getElementById('performanceResult');
+                    resultDiv.innerHTML = `
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <h3>${data.avg_time}ms</h3>
+                                <p class="text-muted">平均推論時間</p>
+                            </div>
+                            <div class="stat-card">
+                                <h3>${data.fps}</h3>
+                                <p class="text-muted">FPS</p>
+                            </div>
+                            <div class="stat-card">
+                                <h3>${data.min_time}ms</h3>
+                                <p class="text-muted">最小時間</p>
+                            </div>
+                            <div class="stat-card">
+                                <h3>${data.max_time}ms</h3>
+                                <p class="text-muted">最大時間</p>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    alert('測試失敗: ' + data.error);
+                }
+            } catch (error) {
+                alert('效能測試失敗: ' + error);
+            } finally {
+                document.getElementById('performanceLoading').style.display = 'none';
+            }
+        }
+
+        // 批次測試
+        async function batchTest() {
+            document.getElementById('batchLoading').style.display = 'block';
+
+            try {
+                const response = await fetch('/api/batch_test');
+                const data = await response.json();
+
+                if (data.success) {
+                    const resultDiv = document.getElementById('batchResult');
+                    let html = '<div class="result-container">';
+                    html += '<h5>批次測試結果</h5>';
+
+                    // 整體準確率
+                    html += `
+                        <div class="alert alert-info">
+                            <h4>整體準確率: ${data.overall_accuracy}%</h4>
+                            <p>${data.total_correct} / ${data.total_tested} 正確</p>
+                        </div>
+                    `;
+
+                    // 各類別準確率
+                    html += '<div class="stats-grid">';
+                    for (const [className, result] of Object.entries(data.results)) {
+                        html += `
+                            <div class="stat-card">
+                                <h4>${className}</h4>
+                                <h3>${result.accuracy}%</h3>
+                                <p class="text-muted">${result.correct}/${result.total}</p>
+                            </div>
+                        `;
+                    }
+                    html += '</div>';
+                    html += '</div>';
+
+                    resultDiv.innerHTML = html;
+                } else {
+                    alert('批次測試失敗: ' + data.error);
+                }
+            } catch (error) {
+                alert('批次測試失敗: ' + error);
+            } finally {
+                document.getElementById('batchLoading').style.display = 'none';
+            }
+        }
+
+        // 處理多個STL檔案
+        function handleMultipleStlFiles(files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+
+                // 檢查檔案類型
+                if (!file.name.toLowerCase().endsWith('.stl')) {
+                    alert(`檔案 ${file.name} 不是STL格式，已跳過`);
+                    continue;
+                }
+
+                // 檢查是否已存在
+                const exists = selectedStlFiles.some(f => f.name === file.name && f.size === file.size);
+                if (exists) {
+                    alert(`檔案 ${file.name} 已存在，已跳過`);
+                    continue;
+                }
+
+                // 添加到選中的STL檔案列表
+                selectedStlFiles.push(file);
+            }
+
+            updateStlFilePreview();
+        }
+
+        // 更新STL檔案預覽
+        function updateStlFilePreview() {
+            const stlFilePreview = document.getElementById('stlFilePreview');
+            const stlFilesGrid = document.getElementById('stlFilesGrid');
+            const stlFileCount = document.getElementById('stlFileCount');
+            const stlTrainCount = document.getElementById('stlTrainCount');
+
+            if (selectedStlFiles.length === 0) {
+                stlFilePreview.classList.remove('show');
+                document.getElementById('stlDropZone').classList.remove('has-file');
+                return;
+            }
+
+            stlFilePreview.classList.add('show');
+            document.getElementById('stlDropZone').classList.add('has-file');
+
+            stlFileCount.textContent = selectedStlFiles.length;
+            stlTrainCount.textContent = selectedStlFiles.length;
+
+            // 清空網格
+            stlFilesGrid.innerHTML = '';
+
+            // 為每個STL檔案創建預覽卡片
+            selectedStlFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+
+                // 初始化物件名稱（如果尚未設定）
+                if (!file.objectName) {
+                    file.objectName = file.name.replace(/\.stl$/i, ''); // 移除.stl副檔名
+                }
+
+                fileItem.innerHTML = `
+                    <button class="remove-file" onclick="removeStlFile(${index})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div style="display: flex; align-items: center; justify-content: center; height: 120px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px;">
+                        <i class="fas fa-gem" style="font-size: 36px; color: #28a745;"></i>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label text-muted small">物件名稱:</label>
+                        <input type="text" class="form-control form-control-sm"
+                               value="${file.objectName}"
+                               onchange="updateObjectName(${index}, this.value)"
+                               placeholder="輸入珠寶名稱">
+                    </div>
+                    <div class="file-name text-muted small">${file.name}</div>
+                    <div class="file-size text-muted small">${formatFileSize(file.size)}</div>
+                `;
+
+                stlFilesGrid.appendChild(fileItem);
+            });
+        }
+
+        // 移除單個STL檔案
+        function removeStlFile(index) {
+            selectedStlFiles.splice(index, 1);
+            updateStlFilePreview();
+        }
+
+        // 更新物件名稱
+        function updateObjectName(index, newName) {
+            if (selectedStlFiles[index]) {
+                selectedStlFiles[index].objectName = newName.trim() || selectedStlFiles[index].name.replace(/\.stl$/i, '');
+            }
+        }
+
+        // 清除所有STL檔案
+        function clearAllStlFiles() {
+            selectedStlFiles = [];
+            document.getElementById('stlFileInput').value = '';
+            updateStlFilePreview();
+            document.getElementById('trainingResult').innerHTML = '';
+            document.getElementById('trainingProgressContainer').style.display = 'none';
+        }
+
+        // 選擇訓練模式
+        function selectTrainingMode(mode) {
+            // 更新 radio 按鈕狀態
+            document.getElementById('normalMode').checked = (mode === 'normal');
+            document.getElementById('precisionMode').checked = (mode === 'precision');
+
+            // 更新卡片樣式
+            const normalCard = document.querySelector('[onclick="selectTrainingMode(\'normal\')"]');
+            const precisionCard = document.querySelector('[onclick="selectTrainingMode(\'precision\')"]');
+
+            if (mode === 'normal') {
+                normalCard.classList.add('border-primary', 'bg-light');
+                normalCard.classList.remove('border-success');
+                precisionCard.classList.remove('border-success', 'bg-light');
+                precisionCard.classList.add('border-secondary');
+
+                // 設定正常訓練參數
+                document.getElementById('trainEpochs').value = 50;
+                document.getElementById('imagesPerModel').value = 180;
+                document.getElementById('batchSize').value = 4;
+                document.getElementById('imageSize').value = 416;
+            } else {
+                precisionCard.classList.add('border-success', 'bg-light');
+                precisionCard.classList.remove('border-secondary');
+                normalCard.classList.remove('border-primary', 'bg-light');
+                normalCard.classList.add('border-secondary');
+
+                // 設定精準訓練參數
+                document.getElementById('trainEpochs').value = 100;
+                document.getElementById('imagesPerModel').value = 360;
+                document.getElementById('batchSize').value = 8;
+                document.getElementById('imageSize').value = 512;
+            }
+        }
+
+        // 開始訓練
+        async function startTraining() {
+            if (selectedStlFiles.length === 0) {
+                alert('請先選擇STL檔案！');
+                return;
+            }
+
+            const startTrainingBtn = document.getElementById('startTrainingBtn');
+            const stopTrainingBtn = document.getElementById('stopTrainingBtn');
+            const trainingProgressContainer = document.getElementById('trainingProgressContainer');
+
+            // 獲取訓練設定
+            const trainingMode = document.querySelector('input[name="trainingMode"]:checked').value;
+            const epochs = document.getElementById('trainEpochs').value;
+            const batchSize = document.getElementById('batchSize').value;
+            const imageSize = document.getElementById('imageSize').value;
+            const imagesPerModel = document.getElementById('imagesPerModel').value;
+
+            const formData = new FormData();
+
+            // 添加STL檔案和物件名稱
+            selectedStlFiles.forEach((file, index) => {
+                formData.append('stl_files', file);
+                formData.append(`object_names[${index}]`, file.objectName || file.name.replace(/\.stl$/i, ''));
+            });
+
+            // 添加訓練設定
+            formData.append('training_mode', trainingMode);
+            formData.append('epochs', epochs);
+            formData.append('batch_size', batchSize);
+            formData.append('image_size', imageSize);
+            formData.append('images_per_model', imagesPerModel);
+
+            startTrainingBtn.style.display = 'none';
+            stopTrainingBtn.style.display = 'block';
+            trainingProgressContainer.style.display = 'block';
+
+            try {
+                const response = await fetch('/api/start_training', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentTrainingId = data.training_id;
+                    updateTrainingLog('訓練已開始，訓練ID: ' + currentTrainingId);
+
+                    // 開始監控訓練進度
+                    trainingInterval = setInterval(checkTrainingProgress, 2000);
+                } else {
+                    alert('啟動訓練失敗: ' + data.error);
+                    resetTrainingUI();
+                }
+            } catch (error) {
+                alert('啟動訓練失敗: ' + error);
+                resetTrainingUI();
+            }
+        }
+
+        // 停止訓練
+        async function stopTraining() {
+            if (!currentTrainingId) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/stop_training', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        training_id: currentTrainingId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateTrainingLog('訓練已停止');
+                } else {
+                    updateTrainingLog('停止訓練失敗: ' + data.error);
+                }
+            } catch (error) {
+                updateTrainingLog('停止訓練失敗: ' + error);
+            }
+
+            resetTrainingUI();
+        }
+
+        // 檢查訓練進度
+        async function checkTrainingProgress() {
+            if (!currentTrainingId) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/training_progress/${currentTrainingId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    updateTrainingProgress(data.progress);
+
+                    if (data.progress.status === 'completed' || data.progress.status === 'failed') {
+                        resetTrainingUI();
+
+                        if (data.progress.status === 'completed') {
+                            displayTrainingResult(data.progress);
+                        }
+                    }
+                } else {
+                    updateTrainingLog('獲取進度失敗: ' + data.error);
+                }
+            } catch (error) {
+                updateTrainingLog('獲取進度失敗: ' + error);
+            }
+        }
+
+        // 更新訓練進度
+        function updateTrainingProgress(progress) {
+            // 更新整體進度
+            const overallProgress = document.getElementById('overallProgress');
+            const overallProgressBar = document.getElementById('overallProgressBar');
+
+            overallProgress.textContent = Math.round(progress.overall_progress) + '%';
+            overallProgressBar.style.width = progress.overall_progress + '%';
+
+            // 更新當前階段
+            const currentStage = document.getElementById('currentStage');
+            currentStage.innerHTML = `<strong>${progress.stage}</strong>`;
+
+            // 更新詳細進度
+            const detailedProgress = document.getElementById('detailedProgress');
+            if (progress.details) {
+                let detailsHtml = '<div class="row">';
+                for (const [key, value] of Object.entries(progress.details)) {
+                    detailsHtml += `
+                        <div class="col-md-6 mb-2">
+                            <div class="progress-item">
+                                <span>${key}</span>
+                                <span>${value}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                detailsHtml += '</div>';
+                detailedProgress.innerHTML = detailsHtml;
+            }
+
+            // 更新訓練日誌
+            if (progress.logs && progress.logs.length > 0) {
+                progress.logs.forEach(log => {
+                    updateTrainingLog(log);
+                });
+            }
+        }
+
+        // 更新訓練日誌
+        function updateTrainingLog(message) {
+            const trainingLog = document.getElementById('trainingLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+
+            trainingLog.textContent += logEntry;
+            trainingLog.scrollTop = trainingLog.scrollHeight;
+        }
+
+        // 重置訓練UI
+        function resetTrainingUI() {
+            document.getElementById('startTrainingBtn').style.display = 'block';
+            document.getElementById('stopTrainingBtn').style.display = 'none';
+
+            if (trainingInterval) {
+                clearInterval(trainingInterval);
+                trainingInterval = null;
+            }
+
+            currentTrainingId = null;
+        }
+
+        // 顯示訓練結果
+        function displayTrainingResult(progress) {
+            const trainingResult = document.getElementById('trainingResult');
+
+            let html = '<div class="result-container mt-4">';
+            html += '<h5><i class="fas fa-check-circle text-success"></i> 訓練完成</h5>';
+
+            if (progress.model_path) {
+                html += `
+                    <div class="alert alert-success">
+                        <strong>新模型已保存：</strong> ${progress.model_path}<br>
+                        <button class="btn btn-primary mt-2" onclick="loadNewModel('${progress.model_path}')">
+                            <i class="fas fa-download"></i> 載入新模型
+                        </button>
+                    </div>
+                `;
+            }
+
+            if (progress.accuracy) {
+                html += `
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>${progress.accuracy}%</h3>
+                            <p>最終準確率</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>${progress.loss || 'N/A'}</h3>
+                            <p>最終損失</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            trainingResult.innerHTML = html;
+        }
+
+        // 載入新模型
+        async function loadNewModel(modelPath) {
+            try {
+                const response = await fetch('/api/load_model', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model_path: modelPath
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('新模型載入成功！');
+                    checkModelStatus(); // 更新模型狀態顯示
+                } else {
+                    alert('載入模型失敗: ' + data.error);
+                }
+            } catch (error) {
+                alert('載入模型失敗: ' + error);
+            }
+        }
+
+        // 檢查並恢復訓練任務
+        function checkAndRestoreTrainingTasks() {
+            fetch('/api/all_training_tasks')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.tasks) {
+                        for (const [taskId, task] of Object.entries(data.tasks)) {
+                            // 只顯示正在進行中的任務或最近完成的任務
+                            if (['preparing', 'generating', 'training'].includes(task.status) ||
+                                (task.status === 'completed' && isRecentTask(task.start_time))) {
+                                displayTrainingProgress(taskId, task);
+
+                                // 如果任務正在進行中，開始輪詢進度
+                                if (['preparing', 'generating', 'training'].includes(task.status)) {
+                                    startProgressPolling(taskId);
+                                }
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('載入訓練任務失敗:', error);
+                });
+        }
+
+        // 檢查是否為最近的任務（24小時內）
+        function isRecentTask(startTimeStr) {
+            if (!startTimeStr) return false;
+            const startTime = new Date(startTimeStr);
+            const now = new Date();
+            const diffHours = (now - startTime) / (1000 * 60 * 60);
+            return diffHours < 24;
+        }
+
+        // 顯示訓練進度
+        function displayTrainingProgress(taskId, task) {
+            const progressDiv = document.getElementById('trainingProgress');
+            if (!progressDiv) return;
+
+            progressDiv.style.display = 'block';
+
+            // 更新進度條
+            const progressBar = progressDiv.querySelector('.progress-bar');
+            if (progressBar) {
+                progressBar.style.width = task.overall_progress + '%';
+                progressBar.textContent = Math.round(task.overall_progress) + '%';
+            }
+
+            // 更新狀態文字
+            const statusText = progressDiv.querySelector('#trainingStatus');
+            if (statusText) {
+                statusText.textContent = task.stage || '準備中...';
+            }
+
+            // 更新日誌
+            if (task.logs && task.logs.length > 0) {
+                const logDiv = progressDiv.querySelector('#trainingLogs');
+                if (logDiv) {
+                    logDiv.innerHTML = task.logs.map(log => `<div class="text-muted small">${log}</div>`).join('');
+                }
+            }
+        }
+
+        // 開始進度輪詢
+        function startProgressPolling(taskId) {
+            const pollInterval = setInterval(() => {
+                fetch(`/api/training_progress/${taskId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.task) {
+                            displayTrainingProgress(taskId, data.task);
+
+                            // 如果訓練完成或失敗，停止輪詢
+                            if (['completed', 'failed', 'stopped'].includes(data.task.status)) {
+                                clearInterval(pollInterval);
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('獲取訓練進度失敗:', error);
+                        clearInterval(pollInterval);
+                    });
+            }, 2000); // 每2秒檢查一次進度
+        }
+
+        // 頁面載入時初始化
+        window.onload = function() {
+            checkModelStatus();
+            initDragDrop();
+            checkAndRestoreTrainingTasks(); // 恢復訓練任務
+            setInterval(checkModelStatus, 5000); // 每5秒檢查一次模型狀態
+        };
+    </script>
+</body>
+</html>

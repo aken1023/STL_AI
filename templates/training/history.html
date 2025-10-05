@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}訓練歷史 - STL 系統{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-history"></i> 訓練歷史</h2>
+            <p class="text-muted">查看過往的訓練記錄</p>
+        </div>
+        <div class="col-auto">
+            <a href="/training" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> 返回訓練控制台
+            </a>
+        </div>
+    </div>
+
+    <!-- 訓練歷史列表 -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">歷史記錄</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>訓練時間</th>
+                                    <th>訓練方法</th>
+                                    <th>模型數量</th>
+                                    <th>圖片數量</th>
+                                    <th>訓練時長</th>
+                                    <th>狀態</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">暫無訓練歷史</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 載入訓練歷史
+    function loadHistory() {
+        fetch('/api/training_history')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('historyTableBody');
+
+                if (data.success && data.history && data.history.length > 0) {
+                    tbody.innerHTML = data.history.map(record => `
+                        <tr>
+                            <td>${record.timestamp || '-'}</td>
+                            <td><span class="badge bg-info">${record.method || 'FAISS'}</span></td>
+                            <td>${record.model_count || '-'}</td>
+                            <td>${record.image_count || '-'}</td>
+                            <td>${record.duration || '-'}</td>
+                            <td>
+                                <span class="badge bg-${record.status === 'success' ? 'success' : 'danger'}">
+                                    ${record.status === 'success' ? '成功' : '失敗'}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewDetails('${record.id}')">
+                                    <i class="fas fa-eye"></i> 詳情
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">暫無訓練歷史</td></tr>';
+                }
+            })
+            .catch(error => {
+                console.error('載入歷史失敗:', error);
+            });
+    }
+
+    // 查看詳情
+    function viewDetails(id) {
+        alert('查看訓練記錄 ID: ' + id);
+        // TODO: 實作詳情頁面
+    }
+
+    // 初始化
+    loadHistory();
+</script>
+{% endblock %}

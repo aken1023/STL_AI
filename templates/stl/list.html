@@ -1,0 +1,1637 @@
+{% extends "base.html" %}
+
+{% block title %}STL 檔案管理 - STL 系統{% endblock %}
+
+{% block extra_css %}
+<!-- Three.js for 3D Preview -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<style>
+    /* 確保預覽顯示的 row 使用正確的網格 */
+    #stlFilesList {
+        display: flex;
+        flex-wrap: wrap;
+        margin-right: -0.5rem;
+        margin-left: -0.5rem;
+    }
+
+    #stlFilesList > div {
+        padding-right: 0.5rem;
+        padding-left: 0.5rem;
+    }
+
+    .stl-card {
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        transition: all 0.3s;
+        background: white;
+        display: flex;
+        flex-direction: column;
+    }
+    .stl-card:hover {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .stl-3d-preview {
+        width: 100%;
+        height: 200px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        position: relative;
+        cursor: pointer;
+    }
+    .stl-3d-preview canvas {
+        border-radius: 8px;
+    }
+    .preview-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 14px;
+    }
+    .stl-card-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+    }
+    .stl-thumbnail {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+    .status-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+    .action-buttons .btn {
+        margin: 2px;
+    }
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+    }
+    .stat-card h3 {
+        margin: 0;
+        font-size: 2rem;
+    }
+    .stat-card small {
+        opacity: 0.9;
+    }
+    .training-status-card {
+        background: #f8f9fa;
+        border: 2px solid #dee2e6;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .training-progress {
+        height: 30px;
+        border-radius: 15px;
+        overflow: hidden;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 頁面標題和操作按鈕 -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-folder-open"></i> STL 檔案管理</h2>
+            <p class="text-muted">管理 STL 模型、生成圖片、訓練模型</p>
+        </div>
+        <div class="col-auto">
+            <a href="/stl/upload" class="btn btn-primary">
+                <i class="fas fa-upload"></i> 上傳 STL
+            </a>
+            <button class="btn btn-success" onclick="generateAllImages()">
+                <i class="fas fa-image"></i> 批次生成圖片
+            </button>
+            <button class="btn btn-warning" onclick="showTrainingModal()">
+                <i class="fas fa-robot"></i> 重新訓練模型
+            </button>
+        </div>
+    </div>
+
+    <!-- 統計資訊 -->
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+            <h3 id="totalSTLs">0</h3>
+            <small><i class="fas fa-cube"></i> STL 檔案</small>
+        </div>
+        <div class="stat-card">
+            <h3 id="totalImages">0</h3>
+            <small><i class="fas fa-images"></i> 訓練圖片</small>
+        </div>
+        <div class="stat-card">
+            <h3 id="totalSize">0 MB</h3>
+            <small><i class="fas fa-hdd"></i> 總大小</small>
+        </div>
+        <div class="stat-card">
+            <h3 id="trainingStatus">未訓練</h3>
+            <small><i class="fas fa-brain"></i> 訓練狀態</small>
+        </div>
+    </div>
+
+    <!-- 訓練狀態卡片 -->
+    <div id="trainingStatusCard" class="training-status-card" style="display:none;">
+        <h5><i class="fas fa-robot"></i> 模型訓練狀態</h5>
+        <div class="progress training-progress mt-3">
+            <div id="trainingProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                 role="progressbar" style="width: 0%">
+                <span id="trainingProgressText">0%</span>
+            </div>
+        </div>
+        <p id="trainingStatusText" class="mt-2 mb-0 text-muted"></p>
+    </div>
+
+    <!-- STL 檔案列表 -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-list"></i> STL 檔案列表</h5>
+            <div>
+                <!-- 視圖切換按鈕組 -->
+                <div class="btn-group me-2" role="group">
+                    <button class="btn btn-sm btn-outline-primary active" onclick="setViewMode('simple')" id="simpleViewBtn">
+                        <i class="fas fa-th-list"></i> 簡易列表
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="setViewMode('preview')" id="previewViewBtn">
+                        <i class="fas fa-images"></i> 預覽顯示
+                    </button>
+                </div>
+
+                <button class="btn btn-sm btn-outline-secondary" onclick="toggleThumbnails()" id="toggleThumbnailBtn" style="display: none;">
+                    <i class="fas fa-image"></i> 顯示預覽圖
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="toggle3DPreview()" id="toggle3DBtn" style="display: none;">
+                    <i class="fas fa-cube"></i> 啟用 3D 預覽
+                </button>
+                <button class="btn btn-sm btn-outline-primary" onclick="refreshList()">
+                    <i class="fas fa-sync"></i> 重新整理
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteSelected()">
+                    <i class="fas fa-trash"></i> 刪除選取
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- 簡易列表視圖（預設顯示） -->
+            <div class="table-responsive" id="stlFilesTable" style="display: block;">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th width="40"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                            <th>檔案名稱</th>
+                            <th>大小</th>
+                            <th>圖片數量</th>
+                            <th>狀態</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stlFilesTableBody">
+                        <!-- 動態載入 -->
+                    </tbody>
+                </table>
+            </div>
+            <!-- 預覽顯示視圖 -->
+            <div class="row" id="stlFilesList" style="display: none;">
+                <!-- 動態載入 STL 檔案卡片 -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 訓練設定 Modal -->
+<div class="modal fade" id="trainingModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-robot"></i> 重新訓練模型</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    重新訓練將使用所有 STL 檔案的圖片建立新的 FAISS 索引。訓練過程包含：
+                    <ul class="mb-0 mt-2">
+                        <li>ResNet50 特徵提取</li>
+                        <li>FAISS 索引建立</li>
+                        <li>CLIP 索引更新（可選）</li>
+                    </ul>
+                </div>
+
+                <h6>訓練選項</h6>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="trainResNet" checked>
+                    <label class="form-check-label" for="trainResNet">
+                        <strong>ResNet50 + FAISS</strong> - 圖片識別模型
+                    </label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="trainCLIP">
+                    <label class="form-check-label" for="trainCLIP">
+                        <strong>CLIP + FAISS</strong> - 智能搜尋索引
+                    </label>
+                </div>
+
+                <h6 class="mt-4">進階設定</h6>
+                <div class="mb-3">
+                    <label class="form-label">特徵提取模型</label>
+                    <select class="form-select" id="featureModel">
+                        <option value="ResNet50" selected>ResNet50 (推薦)</option>
+                        <option value="ResNet101">ResNet101 (更準確)</option>
+                        <option value="VGG16">VGG16 (經典)</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">FAISS 索引類型</label>
+                    <select class="form-select" id="faissIndexType">
+                        <option value="IndexFlatIP" selected>IndexFlatIP (精確搜索)</option>
+                        <option value="IndexFlatL2">IndexFlatL2 (L2 距離)</option>
+                        <option value="IndexIVFFlat">IndexIVFFlat (快速搜索)</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">搜索相似度 K 值: <span id="kValueDisplay">5</span></label>
+                    <input type="range" class="form-range" id="kValue" min="3" max="20" value="5"
+                           oninput="document.getElementById('kValueDisplay').textContent = this.value">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="startTraining()">
+                    <i class="fas fa-play"></i> 開始訓練
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 檔案詳情 Modal -->
+<div class="modal fade" id="fileDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fileDetailTitle"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="fileDetailBody">
+                <!-- 動態載入檔案詳情 -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- STL 即時預覽 Modal -->
+<div class="modal fade" id="stlPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stlPreviewTitle">
+                    <i class="fas fa-cube"></i> STL 3D 預覽
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="stl3DViewer" style="width: 100%; height: 600px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; position: relative;">
+                    <div id="viewerLoading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center;">
+                        <i class="fas fa-spinner fa-spin fa-3x mb-3"></i>
+                        <p>載入 3D 模型中...</p>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-info-circle"></i> 使用滑鼠操作：
+                        <strong>左鍵拖曳</strong> - 旋轉 |
+                        <strong>滾輪</strong> - 縮放 |
+                        <strong>右鍵拖曳</strong> - 平移
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- STL 圖片預覽 Modal -->
+<div class="modal fade" id="stlImagesModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stlImagesTitle">
+                    <i class="fas fa-images"></i> STL 訓練圖片
+                </h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" id="autoPlayBtn" onclick="toggleAutoPlay()">
+                        <i class="fas fa-play"></i> 自動播放
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="imageViewerContainer">
+                    <!-- 主圖顯示區 -->
+                    <div id="mainImageViewer" style="position: relative; background: #f8f9fa; border-radius: 8px; padding: 20px; min-height: 500px; display: flex; align-items: center; justify-content: center;">
+                        <img id="mainImage" src="" alt="STL Image" style="max-width: 100%; max-height: 500px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                        <div id="imageLoading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+                            <i class="fas fa-spinner fa-spin fa-3x mb-3 text-primary"></i>
+                            <p class="text-muted">載入圖片中...</p>
+                        </div>
+                    </div>
+
+                    <!-- 圖片資訊和控制 -->
+                    <div class="mt-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-primary" id="currentImageInfo">1 / 360</span>
+                            <span class="ms-2 text-muted" id="imageFileName">img_001.png</span>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-outline-secondary" onclick="firstImage()">
+                                <i class="fas fa-fast-backward"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="prevImage()">
+                                <i class="fas fa-step-backward"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="nextImage()">
+                                <i class="fas fa-step-forward"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="lastImage()">
+                                <i class="fas fa-fast-forward"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 圖片縮圖網格 -->
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">縮圖瀏覽</h6>
+                            <div>
+                                <label class="me-2 small text-muted">每頁顯示：</label>
+                                <select class="form-select form-select-sm d-inline-block" style="width: auto;" id="thumbnailsPerPage" onchange="updateThumbnails()">
+                                    <option value="12">12 張</option>
+                                    <option value="24" selected>24 張</option>
+                                    <option value="36">36 張</option>
+                                    <option value="60">60 張</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="thumbnailsGrid" class="row g-2">
+                            <!-- 動態生成縮圖 -->
+                        </div>
+                        <div class="mt-3 d-flex justify-content-center">
+                            <nav>
+                                <ul class="pagination pagination-sm" id="thumbnailPagination">
+                                    <!-- 動態生成分頁 -->
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let stlFiles = [];
+    let selectedFiles = new Set();
+    let trainingModal = null;
+    let fileDetailModal = null;
+    let stlPreviewModal = null;
+    let stlImagesModal = null;
+    let show3DPreview = false; // 預設隱藏 3D 預覽
+    let showThumbnails = false; // 預設隱藏靜態照片預覽
+    let observerInstance = null; // Intersection Observer 實例
+    let viewMode = 'simple'; // 預設為簡易列表視圖
+
+    // Three.js 變數
+    let scene = null;
+    let camera = null;
+    let renderer = null;
+    let controls = null;
+    let currentMesh = null;
+
+    // 圖片預覽變數
+    let currentModelName = '';
+    let currentImageIndex = 0;
+    let totalImages = 0;
+    let autoPlayInterval = null;
+    let isAutoPlaying = false;
+    let currentThumbnailPage = 1;
+
+    // 初始化 Modals
+    document.addEventListener('DOMContentLoaded', function() {
+        trainingModal = new bootstrap.Modal(document.getElementById('trainingModal'));
+        fileDetailModal = new bootstrap.Modal(document.getElementById('fileDetailModal'));
+        stlPreviewModal = new bootstrap.Modal(document.getElementById('stlPreviewModal'));
+        stlImagesModal = new bootstrap.Modal(document.getElementById('stlImagesModal'));
+        loadSTLFiles();
+        checkTrainingStatus();
+
+        // 監聽 Modal 關閉事件，清理 3D 場景
+        document.getElementById('stlPreviewModal').addEventListener('hidden.bs.modal', function() {
+            cleanup3DScene();
+        });
+
+        // 監聽圖片 Modal 關閉事件，停止自動播放
+        document.getElementById('stlImagesModal').addEventListener('hidden.bs.modal', function() {
+            stopAutoPlay();
+        });
+    });
+
+    // 設定視圖模式
+    function setViewMode(mode) {
+        viewMode = mode;
+
+        const simpleBtn = document.getElementById('simpleViewBtn');
+        const previewBtn = document.getElementById('previewViewBtn');
+        const cardView = document.getElementById('stlFilesList');
+        const tableView = document.getElementById('stlFilesTable');
+
+        if (mode === 'simple') {
+            // 簡易列表模式
+            simpleBtn.classList.add('active');
+            previewBtn.classList.remove('active');
+            cardView.style.display = 'none';
+            tableView.style.display = 'block';
+
+            // 隱藏預覽相關按鈕
+            document.getElementById('toggleThumbnailBtn').style.display = 'none';
+            document.getElementById('toggle3DBtn').style.display = 'none';
+
+            // 更新簡易列表內容
+            displaySimpleList(stlFiles);
+        } else {
+            // 預覽顯示模式
+            previewBtn.classList.add('active');
+            simpleBtn.classList.remove('active');
+            tableView.style.display = 'none';
+            cardView.style.display = 'flex';
+
+            // 顯示預覽相關按鈕
+            document.getElementById('toggleThumbnailBtn').style.display = 'inline-block';
+            document.getElementById('toggle3DBtn').style.display = 'inline-block';
+
+            // 更新預覽顯示內容
+            displaySTLFiles(stlFiles);
+        }
+    }
+
+    // 顯示簡易列表
+    function displaySimpleList(files) {
+        const tableBody = document.getElementById('stlFilesTableBody');
+
+        if (!files || files.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">尚無 STL 檔案</td></tr>';
+            return;
+        }
+
+        tableBody.innerHTML = files.map((file, index) => {
+            const statusColor = file.image_count >= 360 ? 'success' : 'secondary';
+            const statusText = file.image_count >= 360 ? '已完成' : '未生成';
+            const isSelected = selectedFiles.has(file.name);
+
+            return `
+                <tr>
+                    <td>
+                        <input class="form-check-input" type="checkbox"
+                               ${isSelected ? 'checked' : ''}
+                               onchange="toggleSelection('${file.name}')"
+                               id="check-simple-${index}">
+                    </td>
+                    <td>
+                        <i class="fas fa-cube text-primary"></i>
+                        <strong>${file.name}</strong>
+                    </td>
+                    <td>${formatFileSize(file.size)}</td>
+                    <td>
+                        <span class="badge bg-info">${file.image_count}</span>
+                    </td>
+                    <td>
+                        <span class="badge bg-${statusColor}">${statusText}</span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info" onclick="preview3D('${file.name}')" title="3D 預覽">
+                            <i class="fas fa-cube"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="previewImages('${file.name}')" title="查看圖片">
+                            <i class="fas fa-images"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="viewFileDetail('${file.name}')" title="詳細資訊">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-success" onclick="generateImages('${file.name}')" title="生成圖片">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteFile('${file.name}')" title="刪除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // 全選/取消全選
+    function toggleSelectAll() {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.querySelectorAll('#stlFilesTableBody input[type="checkbox"]');
+
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAll.checked;
+            const fileName = checkbox.id.replace('check-simple-', '');
+            const fileObj = stlFiles[parseInt(fileName)];
+            if (fileObj) {
+                if (selectAll.checked) {
+                    selectedFiles.add(fileObj.name);
+                } else {
+                    selectedFiles.delete(fileObj.name);
+                }
+            }
+        });
+    }
+
+    // 格式化檔案大小
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    // 載入 STL 檔案列表
+    async function loadSTLFiles() {
+        try {
+            const response = await fetch('/api/list_stl_files');
+            const data = await response.json();
+
+            if (data.success && data.files.length > 0) {
+                stlFiles = data.files;
+
+                // 根據當前視圖模式顯示
+                if (viewMode === 'simple') {
+                    displaySimpleList(data.files);
+                } else {
+                    displaySTLFiles(data.files);
+                }
+
+                updateStatistics(data.files);
+            } else {
+                // 根據視圖模式顯示空訊息
+                if (viewMode === 'simple') {
+                    document.getElementById('stlFilesTableBody').innerHTML =
+                        '<tr><td colspan="6" class="text-center text-muted p-4">尚無 STL 檔案</td></tr>';
+                } else {
+                    document.getElementById('stlFilesList').innerHTML =
+                        '<div class="col-12"><p class="text-muted text-center p-4">尚無 STL 檔案</p></div>';
+                }
+            }
+        } catch (error) {
+            console.error('載入失敗:', error);
+        }
+    }
+
+    // 顯示 STL 檔案卡片
+    function displaySTLFiles(files) {
+        const filesList = document.getElementById('stlFilesList');
+
+        filesList.innerHTML = files.map((file, index) => {
+            const statusColor = file.image_count >= 360 ? 'success' : 'secondary';
+            const statusText = file.image_count >= 360 ? '已完成' : '未生成';
+
+            // 根據設定顯示 3D 預覽、縮圖或純資訊
+            const model_name = file.name.replace('.stl', '');
+            const thumbnailUrl = `/dataset/${model_name}/img_001.png`;
+
+            let previewHTML;
+            if (show3DPreview) {
+                // 顯示 3D 預覽
+                previewHTML = `<div class="stl-3d-preview" id="preview-${index}" data-stl="${file.name}">
+                    <div class="preview-loading">
+                        <i class="fas fa-spinner fa-spin"></i> 載入 3D 模型...
+                    </div>
+                </div>`;
+            } else if (showThumbnails) {
+                // 顯示靜態縮圖
+                previewHTML = `<img src="${thumbnailUrl}" class="stl-thumbnail"
+                      onerror="this.src='/static/placeholder.png'"
+                      alt="${file.name}">`;
+            } else {
+                // 不顯示預覽，只顯示檔案資訊卡片
+                previewHTML = `<div class="stl-thumbnail d-flex align-items-center justify-content-center"
+                                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <div class="text-center text-white">
+                        <i class="fas fa-cube" style="font-size: 3rem; opacity: 0.5;"></i>
+                        <p class="mt-2 mb-0 small">點擊按鈕查看預覽</p>
+                    </div>
+                </div>`;
+            }
+
+            return `
+                <div class="col-sm-6 col-md-4 col-lg-3 col-xl-2 mb-4">
+                    <div class="stl-card h-100" onclick="preview3D('${file.name}')" style="cursor: pointer;">
+                        <div class="position-relative">
+                            ${previewHTML}
+                            <div class="form-check position-absolute" style="top: 10px; left: 10px; z-index: 10;">
+                                <input class="form-check-input" type="checkbox"
+                                       onchange="event.stopPropagation(); toggleSelection('${file.name}')"
+                                       id="check-${index}">
+                            </div>
+                        </div>
+                        <div class="card-body d-flex flex-column">
+                            <h6 class="card-title text-truncate" title="${file.name}">
+                                <i class="fas fa-cube text-primary"></i> ${file.name}
+                            </h6>
+                            <div class="mb-2 flex-grow-1">
+                                <small class="text-muted">
+                                    <i class="fas fa-hdd"></i> ${file.size_mb} MB
+                                </small>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-images"></i> ${file.image_count} 張圖片
+                                </small>
+                            </div>
+                            <div class="action-buttons d-flex flex-wrap gap-1">
+                                <button class="btn btn-sm btn-outline-info flex-fill" onclick="event.stopPropagation(); preview3D('${file.name}')" title="3D 預覽">
+                                    <i class="fas fa-cube"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="event.stopPropagation(); previewImages('${file.name}')" title="查看圖片">
+                                    <i class="fas fa-images"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary flex-fill" onclick="event.stopPropagation(); viewDetails('${file.name}')" title="詳情">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-success flex-fill" onclick="event.stopPropagation(); generateImages('${file.name}')" title="生成">
+                                    <i class="fas fa-camera"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger flex-fill" onclick="event.stopPropagation(); deleteFile('${file.name}')" title="刪除">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // 只在啟用 3D 預覽時才初始化
+        if (show3DPreview) {
+            setTimeout(() => {
+                init3DPreviews(files);
+            }, 100);
+        }
+    }
+
+    // 初始化所有 3D 預覽（使用懶加載）
+    function init3DPreviews(files) {
+        // 清理舊的 observer
+        if (observerInstance) {
+            observerInstance.disconnect();
+        }
+
+        // 只初始化前 6 個預覽
+        files.slice(0, 6).forEach((file, index) => {
+            init3DPreview(index, file.name);
+        });
+
+        // 使用 Intersection Observer 實現懶加載
+        observerInstance = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const container = entry.target;
+                    const index = parseInt(container.id.replace('preview-', ''));
+                    const file = files[index];
+                    if (file && !container.dataset.loaded) {
+                        container.dataset.loaded = 'true';
+                        init3DPreview(index, file.name);
+                    }
+                }
+            });
+        }, { rootMargin: '100px' });
+
+        // 觀察所有預覽容器
+        files.forEach((file, index) => {
+            if (index >= 6) {  // 跳過前 6 個已初始化的
+                const container = document.getElementById(`preview-${index}`);
+                if (container) {
+                    observerInstance.observe(container);
+                }
+            }
+        });
+    }
+
+    // 初始化 3D 預覽
+    function init3DPreview(index, filename) {
+        const container = document.getElementById(`preview-${index}`);
+        if (!container) return;
+
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        // 創建場景
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x667eea);
+
+        // 創建相機
+        const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        camera.position.set(0, 0, 100);
+
+        // 創建渲染器
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(width, height);
+        container.innerHTML = '';
+        container.appendChild(renderer.domElement);
+
+        // 添加光源
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight1.position.set(1, 1, 1);
+        scene.add(directionalLight1);
+
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight2.position.set(-1, -1, -1);
+        scene.add(directionalLight2);
+
+        // 載入 STL（正確處理中文檔名）
+        const loader = new THREE.STLLoader();
+        loader.load(
+            `/STL/${encodeURIComponent(filename)}`,
+            function (geometry) {
+                // 計算邊界並居中
+                geometry.computeBoundingBox();
+                const center = new THREE.Vector3();
+                geometry.boundingBox.getCenter(center);
+                geometry.translate(-center.x, -center.y, -center.z);
+
+                // 計算縮放以適應視窗
+                const size = new THREE.Vector3();
+                geometry.boundingBox.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 50 / maxDim;
+
+                // 創建材質和網格
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0xffffff,
+                    specular: 0x111111,
+                    shininess: 200
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.scale.set(scale, scale, scale);
+                mesh.rotation.x = -Math.PI / 2;
+
+                scene.add(mesh);
+
+                // 添加旋轉控制
+                const controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.enableZoom = true;
+                controls.autoRotate = true;
+                controls.autoRotateSpeed = 2;
+
+                // 動畫循環
+                function animate() {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
+                }
+                animate();
+            },
+            function (xhr) {
+                // 載入進度
+                const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+                const loading = container.querySelector('.preview-loading');
+                if (loading) {
+                    loading.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${percent}%`;
+                }
+            },
+            function (error) {
+                console.error('載入 STL 失敗:', filename, error);
+                console.error('嘗試的 URL:', `/STL/${encodeURIComponent(filename)}`);
+                container.innerHTML = `
+                    <div class="preview-loading text-danger">
+                        <i class="fas fa-exclamation-triangle"></i><br>
+                        載入失敗<br>
+                        <small>${filename}</small>
+                    </div>
+                `;
+            }
+        );
+    }
+
+    // 更新統計資訊
+    function updateStatistics(files) {
+        const totalSTLs = files.length;
+        const totalImages = files.reduce((sum, file) => sum + file.image_count, 0);
+        const totalSize = files.reduce((sum, file) => sum + file.size_mb, 0);
+
+        document.getElementById('totalSTLs').textContent = totalSTLs;
+        document.getElementById('totalImages').textContent = totalImages;
+        document.getElementById('totalSize').textContent = totalSize.toFixed(2) + ' MB';
+    }
+
+    // 選擇/取消選擇檔案
+    function toggleSelection(filename) {
+        if (selectedFiles.has(filename)) {
+            selectedFiles.delete(filename);
+        } else {
+            selectedFiles.add(filename);
+        }
+    }
+
+    // 切換縮圖預覽
+    function toggleThumbnails() {
+        showThumbnails = !showThumbnails;
+
+        // 如果啟用縮圖，則關閉 3D 預覽
+        if (showThumbnails && show3DPreview) {
+            show3DPreview = false;
+            const btn3D = document.getElementById('toggle3DBtn');
+            btn3D.innerHTML = '<i class="fas fa-cube"></i> 啟用 3D 預覽';
+            btn3D.classList.remove('btn-outline-info');
+            btn3D.classList.add('btn-outline-secondary');
+        }
+
+        // 更新按鈕文字和樣式
+        const btn = document.getElementById('toggleThumbnailBtn');
+        if (showThumbnails) {
+            btn.innerHTML = '<i class="fas fa-times"></i> 隱藏預覽圖';
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('btn-outline-success');
+        } else {
+            btn.innerHTML = '<i class="fas fa-image"></i> 顯示預覽圖';
+            btn.classList.remove('btn-outline-success');
+            btn.classList.add('btn-outline-secondary');
+        }
+
+        // 重新渲染列表
+        displaySTLFiles(stlFiles);
+    }
+
+    // 切換 3D 預覽
+    function toggle3DPreview() {
+        show3DPreview = !show3DPreview;
+
+        // 如果啟用 3D 預覽，則關閉縮圖
+        if (show3DPreview && showThumbnails) {
+            showThumbnails = false;
+            const btnThumb = document.getElementById('toggleThumbnailBtn');
+            btnThumb.innerHTML = '<i class="fas fa-image"></i> 顯示預覽圖';
+            btnThumb.classList.remove('btn-outline-success');
+            btnThumb.classList.add('btn-outline-secondary');
+        }
+
+        // 更新按鈕文字和圣示
+        const btn = document.getElementById('toggle3DBtn');
+        if (show3DPreview) {
+            btn.innerHTML = '<i class="fas fa-times"></i> 關閉 3D 預覽';
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('btn-outline-info');
+        } else {
+            btn.innerHTML = '<i class="fas fa-cube"></i> 啟用 3D 預覽';
+            btn.classList.remove('btn-outline-info');
+            btn.classList.add('btn-outline-secondary');
+        }
+
+        // 重新渲染列表
+        displaySTLFiles(stlFiles);
+    }
+
+    // 檢查訓練狀態
+    async function checkTrainingStatus() {
+        try {
+            const response = await fetch('/api/training_status');
+            const data = await response.json();
+
+            if (data.is_training) {
+                document.getElementById('trainingStatusCard').style.display = 'block';
+                document.getElementById('trainingProgressBar').style.width = data.progress + '%';
+                document.getElementById('trainingProgressText').textContent = data.progress + '%';
+                document.getElementById('trainingStatusText').textContent = data.status || '訓練中...';
+                document.getElementById('trainingStatus').textContent = '訓練中';
+
+                // 繼續輪詢
+                setTimeout(checkTrainingStatus, 2000);
+            } else {
+                document.getElementById('trainingStatusCard').style.display = 'none';
+
+                // 檢查是否有訓練好的模型
+                const statsResponse = await fetch('/api/search/stats');
+                if (statsResponse.ok) {
+                    const statsData = await statsResponse.json();
+                    if (statsData.success) {
+                        document.getElementById('trainingStatus').textContent = '已訓練';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('檢查訓練狀態失敗:', error);
+        }
+    }
+
+    // 顯示訓練 Modal
+    function showTrainingModal() {
+        trainingModal.show();
+    }
+
+    // 開始訓練
+    async function startTraining() {
+        const trainResNet = document.getElementById('trainResNet').checked;
+        const trainCLIP = document.getElementById('trainCLIP').checked;
+
+        if (!trainResNet && !trainCLIP) {
+            alert('請至少選擇一個訓練選項');
+            return;
+        }
+
+        const config = {
+            train_resnet: trainResNet,
+            train_clip: trainCLIP,
+            feature_model: document.getElementById('featureModel').value,
+            index_type: document.getElementById('faissIndexType').value,
+            k_value: parseInt(document.getElementById('kValue').value)
+        };
+
+        trainingModal.hide();
+
+        try {
+            const response = await fetch('/api/start_training', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    training_methods: trainResNet ? ['faiss'] : [],
+                    faiss_config: config
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('訓練已開始！');
+                checkTrainingStatus();
+            } else {
+                alert('訓練啟動失敗: ' + data.error);
+            }
+        } catch (error) {
+            alert('訓練啟動錯誤: ' + error.message);
+        }
+    }
+
+    // 生成單個 STL 的圖片
+    async function generateImages(filename) {
+        if (!confirm(`確定要為 ${filename} 生成圖片嗎？`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/generate_images', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({stl_file: filename})
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('圖片生成已開始！');
+                setTimeout(refreshList, 2000);
+            } else {
+                alert('生成失敗: ' + data.error);
+            }
+        } catch (error) {
+            alert('生成錯誤: ' + error.message);
+        }
+    }
+
+    // 批次生成所有圖片
+    async function generateAllImages() {
+        if (!confirm('確定要為所有 STL 檔案生成圖片嗎？這可能需要一些時間。')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/generate_all_images', {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('批次生成已開始！');
+                setTimeout(refreshList, 2000);
+            } else {
+                alert('生成失敗: ' + data.error);
+            }
+        } catch (error) {
+            alert('生成錯誤: ' + error.message);
+        }
+    }
+
+    // 刪除檔案
+    async function deleteFile(filename) {
+        if (!confirm(`確定要刪除 ${filename} 嗎？此操作無法復原。`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/delete_stl', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({filename: filename})
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('刪除成功！');
+                refreshList();
+            } else {
+                alert('刪除失敗: ' + data.error);
+            }
+        } catch (error) {
+            alert('刪除錯誤: ' + error.message);
+        }
+    }
+
+    // 刪除選取的檔案
+    async function deleteSelected() {
+        if (selectedFiles.size === 0) {
+            alert('請先選擇要刪除的檔案');
+            return;
+        }
+
+        if (!confirm(`確定要刪除 ${selectedFiles.size} 個檔案嗎？此操作無法復原。`)) {
+            return;
+        }
+
+        for (const filename of selectedFiles) {
+            await deleteFile(filename);
+        }
+
+        selectedFiles.clear();
+        refreshList();
+    }
+
+    // 查看檔案詳情
+    function viewDetails(filename) {
+        const file = stlFiles.find(f => f.name === filename);
+        if (!file) return;
+
+        const modelName = filename.replace('.stl', '');
+        const datasetPath = `dataset/${modelName}`;
+
+        document.getElementById('fileDetailTitle').innerHTML =
+            `<i class="fas fa-cube"></i> ${filename}`;
+
+        // 載入圖片預覽
+        const imageHTML = file.image_count > 0 ? `
+            <div class="row">
+                ${Array.from({length: Math.min(12, file.image_count)}, (_, i) => `
+                    <div class="col-md-2 col-sm-3 col-4 mb-3">
+                        <img src="/${datasetPath}/img_${String(i + 1).padStart(3, '0')}.png"
+                             class="img-fluid rounded"
+                             alt="Image ${i + 1}">
+                    </div>
+                `).join('')}
+            </div>
+        ` : '<p class="text-muted">尚未生成圖片</p>';
+
+        document.getElementById('fileDetailBody').innerHTML = `
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <h6><i class="fas fa-cube"></i> 3D 模型預覽</h6>
+                    <div class="stl-3d-preview" id="detailPreview" style="height: 400px;">
+                        <div class="preview-loading">
+                            <i class="fas fa-spinner fa-spin"></i> 載入 3D 模型...
+                        </div>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        <i class="fas fa-mouse"></i> 滑鼠拖曳旋轉 | 滾輪縮放
+                    </small>
+                </div>
+                <div class="col-md-6">
+                    <h6>檔案資訊</h6>
+                    <table class="table table-sm">
+                        <tr><td>檔案名稱</td><td>${file.name}</td></tr>
+                        <tr><td>檔案大小</td><td>${file.size_mb} MB</td></tr>
+                        <tr><td>圖片數量</td><td>${file.image_count} 張</td></tr>
+                        <tr><td>建立時間</td><td>${file.created_time}</td></tr>
+                        <tr><td>修改時間</td><td>${file.modified_time}</td></tr>
+                    </table>
+
+                    <h6 class="mt-4">操作</h6>
+                    <button class="btn btn-success mb-2 w-100" onclick="generateImages('${filename}')">
+                        <i class="fas fa-image"></i> 生成圖片
+                    </button>
+                    <button class="btn btn-danger w-100" onclick="deleteFile('${filename}')">
+                        <i class="fas fa-trash"></i> 刪除檔案
+                    </button>
+                </div>
+            </div>
+            <hr>
+            <h6>圖片預覽</h6>
+            ${imageHTML}
+        `;
+
+        fileDetailModal.show();
+
+        // 初始化詳情頁的 3D 預覽
+        setTimeout(() => {
+            initDetailPreview(filename);
+        }, 300);
+    }
+
+    // 初始化詳情頁 3D 預覽
+    function initDetailPreview(filename) {
+        const container = document.getElementById('detailPreview');
+        if (!container) return;
+
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        // 創建場景
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x667eea);
+
+        // 創建相機
+        const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        camera.position.set(0, 0, 100);
+
+        // 創建渲染器
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(width, height);
+        container.innerHTML = '';
+        container.appendChild(renderer.domElement);
+
+        // 添加光源
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight1.position.set(1, 1, 1);
+        scene.add(directionalLight1);
+
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight2.position.set(-1, -1, -1);
+        scene.add(directionalLight2);
+
+        // 載入 STL（正確處理中文檔名）
+        const loader = new THREE.STLLoader();
+        loader.load(
+            `/STL/${encodeURIComponent(filename)}`,
+            function (geometry) {
+                // 計算邊界並居中
+                geometry.computeBoundingBox();
+                const center = new THREE.Vector3();
+                geometry.boundingBox.getCenter(center);
+                geometry.translate(-center.x, -center.y, -center.z);
+
+                // 計算縮放以適應視窗
+                const size = new THREE.Vector3();
+                geometry.boundingBox.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 50 / maxDim;
+
+                // 創建材質和網格
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0xffffff,
+                    specular: 0x111111,
+                    shininess: 200
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.scale.set(scale, scale, scale);
+                mesh.rotation.x = -Math.PI / 2;
+
+                scene.add(mesh);
+
+                // 添加旋轉控制
+                const controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.enableZoom = true;
+                controls.autoRotate = false; // 詳情頁不自動旋轉
+
+                // 動畫循環
+                function animate() {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
+                }
+                animate();
+            },
+            function (xhr) {
+                const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+                const loading = container.querySelector('.preview-loading');
+                if (loading) {
+                    loading.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${percent}%`;
+                }
+            },
+            function (error) {
+                console.error('載入 STL 失敗:', filename, error);
+                console.error('嘗試的 URL:', `/STL/${encodeURIComponent(filename)}`);
+                container.innerHTML = `
+                    <div class="preview-loading text-danger">
+                        <i class="fas fa-exclamation-triangle"></i><br>
+                        載入失敗<br>
+                        <small>${filename}</small>
+                    </div>
+                `;
+            }
+        );
+    }
+
+    // 重新整理列表
+    function refreshList() {
+        loadSTLFiles();
+        checkTrainingStatus();
+    }
+
+    // 每 30 秒自動刷新
+    setInterval(refreshList, 30000);
+
+    // ==================== STL 3D 預覽功能 ====================
+
+    // 開啟 3D 預覽
+    function preview3D(fileName) {
+        document.getElementById('stlPreviewTitle').innerHTML =
+            `<i class="fas fa-cube"></i> STL 3D 預覽 - ${fileName}`;
+
+        // 顯示載入中
+        document.getElementById('viewerLoading').style.display = 'block';
+
+        // 顯示 Modal
+        stlPreviewModal.show();
+
+        // 初始化 3D 場景
+        setTimeout(() => {
+            init3DScene(fileName);
+        }, 300); // 等待 Modal 動畫完成
+    }
+
+    // 初始化 3D 場景
+    function init3DScene(fileName) {
+        const container = document.getElementById('stl3DViewer');
+
+        // 清理舊場景
+        cleanup3DScene();
+
+        // 創建場景
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x667eea);
+
+        // 創建相機
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        camera.position.set(0, 0, 100);
+
+        // 創建渲染器
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        // 添加光源
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(1, 1, 1);
+        scene.add(directionalLight);
+
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+        directionalLight2.position.set(-1, -1, -1);
+        scene.add(directionalLight2);
+
+        // 添加控制器
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = false;
+        controls.minDistance = 10;
+        controls.maxDistance = 500;
+
+        // 載入 STL 模型
+        const loader = new THREE.STLLoader();
+        loader.load(
+            `/STL/${fileName}`,
+            function(geometry) {
+                // 載入成功
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0x9ca3af,
+                    specular: 0x111111,
+                    shininess: 200
+                });
+
+                currentMesh = new THREE.Mesh(geometry, material);
+
+                // 計算模型中心並調整位置
+                geometry.computeBoundingBox();
+                const center = new THREE.Vector3();
+                geometry.boundingBox.getCenter(center);
+                currentMesh.position.sub(center);
+
+                // 計算模型大小以調整相機距離
+                const size = new THREE.Vector3();
+                geometry.boundingBox.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const fov = camera.fov * (Math.PI / 180);
+                let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+                cameraZ *= 1.5; // 增加一些距離
+                camera.position.z = cameraZ;
+
+                scene.add(currentMesh);
+
+                // 隱藏載入中
+                document.getElementById('viewerLoading').style.display = 'none';
+
+                // 開始渲染循環
+                animate();
+            },
+            function(xhr) {
+                // 載入進度
+                const percentComplete = (xhr.loaded / xhr.total) * 100;
+                console.log('STL 載入進度: ' + Math.round(percentComplete) + '%');
+            },
+            function(error) {
+                // 載入錯誤
+                console.error('STL 載入失敗:', error);
+                document.getElementById('viewerLoading').innerHTML =
+                    '<i class="fas fa-exclamation-triangle fa-3x mb-3"></i><p>載入失敗</p>';
+            }
+        );
+    }
+
+    // 動畫循環
+    function animate() {
+        if (!renderer || !scene || !camera) return;
+
+        requestAnimationFrame(animate);
+
+        if (controls) {
+            controls.update();
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // 清理 3D 場景
+    function cleanup3DScene() {
+        if (renderer) {
+            const container = document.getElementById('stl3DViewer');
+            if (container && renderer.domElement) {
+                container.removeChild(renderer.domElement);
+            }
+            renderer.dispose();
+            renderer = null;
+        }
+
+        if (controls) {
+            controls.dispose();
+            controls = null;
+        }
+
+        if (currentMesh) {
+            if (currentMesh.geometry) {
+                currentMesh.geometry.dispose();
+            }
+            if (currentMesh.material) {
+                currentMesh.material.dispose();
+            }
+            currentMesh = null;
+        }
+
+        scene = null;
+        camera = null;
+
+        // 恢復載入狀態
+        document.getElementById('viewerLoading').style.display = 'block';
+        document.getElementById('viewerLoading').innerHTML =
+            '<i class="fas fa-spinner fa-spin fa-3x mb-3"></i><p>載入 3D 模型中...</p>';
+    }
+
+    // ==================== STL 圖片預覽功能 ====================
+
+    // 開啟圖片預覽
+    function previewImages(fileName) {
+        currentModelName = fileName.replace('.stl', '');
+        currentImageIndex = 0;
+        totalImages = 360; // 預設 360 張
+
+        document.getElementById('stlImagesTitle').innerHTML =
+            `<i class="fas fa-images"></i> STL 訓練圖片 - ${fileName}`;
+
+        // 顯示 Modal
+        stlImagesModal.show();
+
+        // 載入第一張圖片
+        loadImage(0);
+        updateThumbnails();
+    }
+
+    // 載入指定圖片
+    function loadImage(index) {
+        currentImageIndex = index;
+        const imgNum = String(index + 1).padStart(3, '0');
+        const imgPath = `/dataset/${currentModelName}/img_${imgNum}.png`;
+
+        const mainImg = document.getElementById('mainImage');
+        const loadingDiv = document.getElementById('imageLoading');
+
+        // 顯示載入中
+        loadingDiv.style.display = 'block';
+        mainImg.style.opacity = '0';
+
+        // 載入圖片
+        const img = new Image();
+        img.onload = function() {
+            mainImg.src = imgPath;
+            mainImg.style.opacity = '1';
+            loadingDiv.style.display = 'none';
+            updateImageInfo();
+        };
+        img.onerror = function() {
+            loadingDiv.innerHTML = '<i class="fas fa-exclamation-triangle fa-3x mb-3 text-warning"></i><p class="text-muted">圖片不存在</p>';
+        };
+        img.src = imgPath;
+    }
+
+    // 更新圖片資訊
+    function updateImageInfo() {
+        document.getElementById('currentImageInfo').textContent = `${currentImageIndex + 1} / ${totalImages}`;
+        document.getElementById('imageFileName').textContent = `img_${String(currentImageIndex + 1).padStart(3, '0')}.png`;
+    }
+
+    // 導航功能
+    function firstImage() {
+        loadImage(0);
+        updateThumbnails();
+    }
+
+    function prevImage() {
+        if (currentImageIndex > 0) {
+            loadImage(currentImageIndex - 1);
+            updateThumbnails();
+        }
+    }
+
+    function nextImage() {
+        if (currentImageIndex < totalImages - 1) {
+            loadImage(currentImageIndex + 1);
+            updateThumbnails();
+        }
+    }
+
+    function lastImage() {
+        loadImage(totalImages - 1);
+        updateThumbnails();
+    }
+
+    // 自動播放
+    function toggleAutoPlay() {
+        if (isAutoPlaying) {
+            stopAutoPlay();
+        } else {
+            startAutoPlay();
+        }
+    }
+
+    function startAutoPlay() {
+        isAutoPlaying = true;
+        document.getElementById('autoPlayBtn').innerHTML = '<i class="fas fa-pause"></i> 暫停播放';
+        document.getElementById('autoPlayBtn').classList.remove('btn-outline-primary');
+        document.getElementById('autoPlayBtn').classList.add('btn-primary');
+
+        autoPlayInterval = setInterval(() => {
+            if (currentImageIndex < totalImages - 1) {
+                nextImage();
+            } else {
+                firstImage();
+            }
+        }, 500); // 每 0.5 秒切換一張
+    }
+
+    function stopAutoPlay() {
+        isAutoPlaying = false;
+        if (autoPlayInterval) {
+            clearInterval(autoPlayInterval);
+            autoPlayInterval = null;
+        }
+        document.getElementById('autoPlayBtn').innerHTML = '<i class="fas fa-play"></i> 自動播放';
+        document.getElementById('autoPlayBtn').classList.remove('btn-primary');
+        document.getElementById('autoPlayBtn').classList.add('btn-outline-primary');
+    }
+
+    // 更新縮圖網格
+    function updateThumbnails() {
+        const perPage = parseInt(document.getElementById('thumbnailsPerPage').value);
+        const totalPages = Math.ceil(totalImages / perPage);
+
+        // 確保當前頁面有效
+        if (currentThumbnailPage > totalPages) {
+            currentThumbnailPage = 1;
+        }
+
+        // 計算當前圖片所在頁面
+        const imagePageNum = Math.floor(currentImageIndex / perPage) + 1;
+        if (imagePageNum !== currentThumbnailPage) {
+            currentThumbnailPage = imagePageNum;
+        }
+
+        const startIdx = (currentThumbnailPage - 1) * perPage;
+        const endIdx = Math.min(startIdx + perPage, totalImages);
+
+        // 生成縮圖
+        const grid = document.getElementById('thumbnailsGrid');
+        grid.innerHTML = '';
+
+        for (let i = startIdx; i < endIdx; i++) {
+            const imgNum = String(i + 1).padStart(3, '0');
+            const imgPath = `/dataset/${currentModelName}/img_${imgNum}.png`;
+            const isActive = i === currentImageIndex;
+
+            const col = document.createElement('div');
+            col.className = 'col-2';
+            col.innerHTML = `
+                <div class="thumbnail-item ${isActive ? 'active' : ''}" onclick="loadImage(${i}); updateThumbnails();" style="cursor: pointer; border: 2px solid ${isActive ? '#667eea' : '#dee2e6'}; border-radius: 4px; overflow: hidden; position: relative;">
+                    <img src="${imgPath}" class="img-fluid" style="width: 100%; height: 80px; object-fit: cover;">
+                    <div class="text-center small" style="background: ${isActive ? '#667eea' : '#f8f9fa'}; color: ${isActive ? 'white' : '#6c757d'}; padding: 2px;">
+                        ${i + 1}
+                    </div>
+                </div>
+            `;
+            grid.appendChild(col);
+        }
+
+        // 更新分頁
+        updatePagination(totalPages);
+    }
+
+    // 更新分頁按鈕
+    function updatePagination(totalPages) {
+        const pagination = document.getElementById('thumbnailPagination');
+        pagination.innerHTML = '';
+
+        // 上一頁
+        const prevLi = document.createElement('li');
+        prevLi.className = `page-item ${currentThumbnailPage === 1 ? 'disabled' : ''}`;
+        prevLi.innerHTML = `<a class="page-link" href="#" onclick="changeThumbnailPage(${currentThumbnailPage - 1}); return false;">上一頁</a>`;
+        pagination.appendChild(prevLi);
+
+        // 頁碼
+        const maxButtons = 5;
+        let startPage = Math.max(1, currentThumbnailPage - 2);
+        let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+        if (endPage - startPage < maxButtons - 1) {
+            startPage = Math.max(1, endPage - maxButtons + 1);
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            const li = document.createElement('li');
+            li.className = `page-item ${i === currentThumbnailPage ? 'active' : ''}`;
+            li.innerHTML = `<a class="page-link" href="#" onclick="changeThumbnailPage(${i}); return false;">${i}</a>`;
+            pagination.appendChild(li);
+        }
+
+        // 下一頁
+        const nextLi = document.createElement('li');
+        nextLi.className = `page-item ${currentThumbnailPage === totalPages ? 'disabled' : ''}`;
+        nextLi.innerHTML = `<a class="page-link" href="#" onclick="changeThumbnailPage(${currentThumbnailPage + 1}); return false;">下一頁</a>`;
+        pagination.appendChild(nextLi);
+    }
+
+    // 切換縮圖頁面
+    function changeThumbnailPage(page) {
+        const perPage = parseInt(document.getElementById('thumbnailsPerPage').value);
+        const totalPages = Math.ceil(totalImages / perPage);
+
+        if (page >= 1 && page <= totalPages) {
+            currentThumbnailPage = page;
+            updateThumbnails();
+        }
+    }
+</script>
+{% endblock %}

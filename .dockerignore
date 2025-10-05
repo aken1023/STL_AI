@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日誌檔案
+*.log
+web.log
+logs/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 測試和臨時檔案
+test_*.py
+demo_*.py
+*_test.py
+*.tmp
+*.bak
+
+# 文檔
+*.md
+docs/
+
+# 不需要的大型檔案
+yolov5/
+*.zip
+*.tar.gz
+
+# 虛擬環境
+.conda/
+conda/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# 訓練中間檔案（可選保留）
+# runs/
+# dataset/

@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  stl-detection:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: stl-object-detection
+    image: stl-detection:latest
+    hostname: stl-detection
+
+    # 端口映射（對外 8082，內部 5000）
+    ports:
+      - "8082:5000"  # Web 介面
+
+    # 環境變數
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Taipei
+      - DISPLAY=:99
+      - PYVISTA_OFF_SCREEN=true
+      - FLASK_ENV=production
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+
+    # 資料卷映射（持久化存儲）
+    volumes:
+      # STL 檔案（唯讀，防止意外修改原始檔案）
+      - ./STL:/app/STL:ro
+      # 資料集（讀寫，用於生成和存儲資料集）
+      - ./dataset:/app/dataset
+      - ./yolo_dataset:/app/yolo_dataset
+      - ./yolo_dataset_enhanced:/app/yolo_dataset_enhanced
+      - ./augmented_dataset:/app/augmented_dataset
+      # 訓練結果和模型
+      - ./runs:/app/runs
+      - ./models:/app/models
+      # Web 上傳和靜態檔案
+      - ./web_uploads:/app/web_uploads
+      - ./static:/app/static
+      # 日誌和訓練記錄
+      - ./logs:/app/logs
+      - ./training_logs:/app/training_logs
+      # 訓練任務配置
+      - ./training_tasks.json:/app/training_tasks.json
+
+    # 資源限制（根據實際硬體調整）
+    deploy:
+      resources:
+        limits:
+          cpus: '6.0'      # 最多使用 6 核心
+          memory: 12G      # 最多使用 12GB RAM
+        reservations:
+          cpus: '2.0'      # 至少保留 2 核心
+          memory: 4G       # 至少保留 4GB RAM
+
+    # 設備映射（如需 GPU 支援，取消註解）
+    # devices:
+    #   - /dev/dri:/dev/dri  # Intel GPU
+    # runtime: nvidia          # NVIDIA GPU (需要 nvidia-docker2)
+
+    # 重啟策略
+    restart: unless-stopped
+
+    # 網絡設定
+    networks:
+      - stl-network
+
+    # 健康檢查（修正為 5000 端口）
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+    # 日誌配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # 安全設定
+    security_opt:
+      - no-new-privileges:true
+
+    # 標籤
+    labels:
+      - "com.stl.description=STL Object Detection System"
+      - "com.stl.version=2.0"
+
+networks:
+  stl-network:
+    driver: bridge
+    name: stl-network

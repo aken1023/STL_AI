@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D STL 預覽測試</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        #container {
+            width: 800px;
+            height: 600px;
+            margin: 50px auto;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        #info {
+            text-align: center;
+            padding: 20px;
+            color: #333;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>3D STL 預覽測試</h1>
+        <p>測試檔案: <span id="filename"></span></p>
+        <p id="status">初始化中...</p>
+    </div>
+    <div id="container"></div>
+
+    <script>
+        // 從 API 獲取第一個 STL 檔案
+        fetch('/api/list_stl_files')
+            .then(response => response.json())
+            .then(data => {
+                if (data.files && data.files.length > 0) {
+                    const firstFile = data.files[0].name;
+                    document.getElementById('filename').textContent = firstFile;
+                    init3DPreview(firstFile);
+                } else {
+                    document.getElementById('status').textContent = '沒有找到 STL 檔案';
+                    document.getElementById('status').className = 'error';
+                }
+            })
+            .catch(error => {
+                document.getElementById('status').textContent = '載入檔案列表失敗: ' + error;
+                document.getElementById('status').className = 'error';
+            });
+
+        function init3DPreview(filename) {
+            const container = document.getElementById('container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // 創建場景
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x667eea);
+
+            // 創建相機
+            const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+            camera.position.set(0, 0, 100);
+
+            // 創建渲染器
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            container.appendChild(renderer.domElement);
+
+            // 添加光源
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight1.position.set(1, 1, 1);
+            scene.add(directionalLight1);
+
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight2.position.set(-1, -1, -1);
+            scene.add(directionalLight2);
+
+            // 載入 STL
+            const loader = new THREE.STLLoader();
+            const url = `/STL/${encodeURIComponent(filename)}`;
+
+            document.getElementById('status').textContent = `載入中... URL: ${url}`;
+            console.log('載入 STL:', url);
+
+            loader.load(
+                url,
+                function (geometry) {
+                    document.getElementById('status').textContent = '載入成功！';
+
+                    // 計算邊界並居中
+                    geometry.computeBoundingBox();
+                    const center = new THREE.Vector3();
+                    geometry.boundingBox.getCenter(center);
+                    geometry.translate(-center.x, -center.y, -center.z);
+
+                    // 計算縮放
+                    const size = new THREE.Vector3();
+                    geometry.boundingBox.getSize(size);
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = 50 / maxDim;
+
+                    // 創建網格
+                    const material = new THREE.MeshPhongMaterial({
+                        color: 0xffffff,
+                        specular: 0x111111,
+                        shininess: 200
+                    });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.scale.set(scale, scale, scale);
+                    mesh.rotation.x = -Math.PI / 2;
+                    scene.add(mesh);
+
+                    // 添加控制器
+                    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+                    controls.enableDamping = true;
+                    controls.dampingFactor = 0.05;
+                    controls.enableZoom = true;
+                    controls.autoRotate = true;
+                    controls.autoRotateSpeed = 2;
+
+                    // 動畫循環
+                    function animate() {
+                        requestAnimationFrame(animate);
+                        controls.update();
+                        renderer.render(scene, camera);
+                    }
+                    animate();
+                },
+                function (xhr) {
+                    const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+                    document.getElementById('status').textContent = `載入中 ${percent}%`;
+                },
+                function (error) {
+                    console.error('載入失敗:', error);
+                    document.getElementById('status').textContent = '載入失敗: ' + error;
+                    document.getElementById('status').className = 'error';
+                }
+            );
+        }
+    </script>
+</body>
+</html>

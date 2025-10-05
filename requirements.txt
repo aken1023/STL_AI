@@ -1,0 +1,16 @@
+numpy
+opencv-python
+matplotlib
+trimesh
+pyvista
+Pillow
+tensorflow
+scikit-learn
+pyglet<2
+ultralytics
+PyYAML
+# CLIP + FAISS dependencies
+torch
+torchvision
+git+https://github.com/openai/CLIP.git
+faiss-cpu  # 或 faiss-gpu (如有 GPU)

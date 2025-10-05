@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STL 訓練監控系統</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            margin: 0;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .alert {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border-left: 5px solid;
+        }
+        .alert-danger {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .alert-warning {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        .alert-success {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .status-running { background: #28a745; }
+        .status-completed { background: #17a2b8; }
+        .status-interrupted { background: #dc3545; }
+        .status-failed { background: #6c757d; }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #218838; }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            transition: width 0.3s ease;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .metric {
+            text-align: center;
+            padding: 15px;
+        }
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .metric-label {
+            color: #6c757d;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 STL 物件辨識 - 訓練監控系統</h1>
+            <p>即時監控訓練進度，管理中斷會話，確保訓練順利進行</p>
+        </div>
+
+        <!-- 恢復提醒區域 -->
+        <div id="resumeAlert" style="display: none;" class="alert alert-danger">
+            <h4>⚠️ 發現被中斷的訓練會話</h4>
+            <p id="resumeMessage"></p>
+            <button class="btn btn-success" onclick="resumeTraining()">🔄 立即恢復</button>
+            <button class="btn" onclick="clearReminder()">❌ 忽略提醒</button>
+        </div>
+
+        <!-- 當前狀態 -->
+        <div class="card">
+            <h2>📊 當前狀態</h2>
+            <div class="grid">
+                <div class="metric">
+                    <div class="metric-value" id="totalSessions">-</div>
+                    <div class="metric-label">總訓練會話</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="interruptedCount">-</div>
+                    <div class="metric-label">被中斷會話</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="currentStatus">-</div>
+                    <div class="metric-label">當前狀態</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 當前訓練進度 -->
+        <div class="card" id="currentTraining" style="display: none;">
+            <h2>🚀 當前訓練進度</h2>
+            <div id="trainingProgress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <div id="progressText" style="margin-top: 10px;"></div>
+            </div>
+            <canvas id="metricsChart" width="400" height="200"></canvas>
+        </div>
+
+        <!-- 訓練會話列表 -->
+        <div class="card">
+            <h2>📋 訓練會話歷史</h2>
+            <button class="btn btn-success" onclick="startNewTraining()">🆕 開始新訓練</button>
+            <button class="btn" onclick="refreshData()">🔄 刷新資料</button>
+
+            <div id="sessionsList">載入中...</div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionData = null;
+        let metricsChart = null;
+
+        // 頁面載入時初始化
+        window.onload = function() {
+            refreshData();
+            setInterval(refreshData, 10000); // 每10秒刷新
+        };
+
+        // 刷新所有資料
+        async function refreshData() {
+            await loadCurrentStatus();
+            await loadSessions();
+        }
+
+        // 載入當前狀態
+        async function loadCurrentStatus() {
+            try {
+                const response = await fetch('/api/current_status');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    // 更新統計數字
+                    document.getElementById('totalSessions').textContent =
+                        data.total_sessions || '0';
+                    document.getElementById('interruptedCount').textContent =
+                        data.interrupted_count || '0';
+
+                    // 顯示恢復提醒
+                    if (data.resume_reminder) {
+                        showResumeAlert(data.resume_reminder);
+                    } else {
+                        hideResumeAlert();
+                    }
+
+                    // 顯示當前訓練狀態
+                    if (data.current_session && data.is_training_active) {
+                        showCurrentTraining(data.current_session);
+                        document.getElementById('currentStatus').textContent = '訓練中';
+                    } else {
+                        hideCurrentTraining();
+                        document.getElementById('currentStatus').textContent = '空閒';
+                    }
+                }
+            } catch (error) {
+                console.error('載入當前狀態失敗:', error);
+            }
+        }
+
+        // 載入訓練會話列表
+        async function loadSessions() {
+            try {
+                const response = await fetch('/api/sessions');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    document.getElementById('totalSessions').textContent = data.total;
+                    displaySessions(data.sessions);
+                }
+            } catch (error) {
+                console.error('載入會話列表失敗:', error);
+                document.getElementById('sessionsList').innerHTML =
+                    '<p class="alert alert-danger">載入失敗: ' + error.message + '</p>';
+            }
+        }
+
+        // 顯示會話列表
+        function displaySessions(sessions) {
+            const container = document.getElementById('sessionsList');
+
+            if (sessions.length === 0) {
+                container.innerHTML = '<p>尚無訓練會話</p>';
+                return;
+            }
+
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<thead><tr style="background: #f8f9fa;"><th style="padding: 10px;">會話ID</th><th>狀態</th><th>進度</th><th>開始時間</th><th>操作</th></tr></thead>';
+            html += '<tbody>';
+
+            sessions.forEach(session => {
+                const progress = session.progress || {};
+
+                // 優先使用 progress_percent，否則計算百分比
+                let progressPercent = progress.progress_percent || 0;
+                if (!progressPercent && progress.total_epochs) {
+                    progressPercent = Math.round((progress.current_epoch / progress.total_epochs) * 100);
+                } else {
+                    progressPercent = Math.round(progressPercent);
+                }
+
+                // 根據圖片數量顯示不同的單位
+                let progressUnit = '';
+                if (progress.total_epochs && progress.total_epochs > 100) {
+                    progressUnit = '張圖片';
+                } else {
+                    progressUnit = 'epochs';
+                }
+
+                html += `<tr style="border-bottom: 1px solid #dee2e6;">
+                    <td style="padding: 10px;">${session.session_id}</td>
+                    <td><span class="status-badge status-${session.status.toLowerCase()}">${session.status}</span></td>
+                    <td>${progress.current_epoch || 0}/${progress.total_epochs || 0} ${progressUnit} (${progressPercent}%)</td>
+                    <td>${new Date(session.start_time).toLocaleString()}</td>
+                    <td>
+                        ${session.status === 'INTERRUPTED' ?
+                            `<button class="btn btn-success" onclick="resumeSession('${session.session_id}')">🔄 恢復</button>` :
+                            `<button class="btn" onclick="viewSession('${session.session_id}')">📊 查看</button>`
+                        }
+                    </td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // 顯示恢復提醒
+        function showResumeAlert(reminder) {
+            document.getElementById('resumeMessage').innerHTML = `
+                <strong>會話 ${reminder.interrupted_session}</strong> 在 <strong>${new Date(reminder.interruption_time).toLocaleString()}</strong> 被中斷<br>
+                上次進度: ${reminder.last_epoch}/${reminder.total_epochs} epochs<br>
+                ${reminder.message}
+            `;
+            document.getElementById('resumeAlert').style.display = 'block';
+        }
+
+        // 隱藏恢復提醒
+        function hideResumeAlert() {
+            document.getElementById('resumeAlert').style.display = 'none';
+        }
+
+        // 恢復訓練
+        async function resumeTraining() {
+            const response = await fetch('/api/interrupted');
+            const data = await response.json();
+
+            if (data.interrupted_sessions.length > 0) {
+                const sessionId = data.interrupted_sessions[0].session_id;
+                await resumeSession(sessionId);
+            }
+        }
+
+        // 恢復指定會話
+        async function resumeSession(sessionId) {
+            try {
+                const response = await fetch(`/api/resume/${sessionId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    alert('✅ 訓練恢復成功！');
+                    refreshData();
+                } else {
+                    alert('❌ 恢復失敗: ' + data.message);
+                }
+            } catch (error) {
+                alert('❌ 恢復失敗: ' + error.message);
+            }
+        }
+
+        // 清除提醒
+        async function clearReminder() {
+            try {
+                await fetch('/api/clear_reminder', { method: 'POST' });
+                hideResumeAlert();
+            } catch (error) {
+                console.error('清除提醒失敗:', error);
+            }
+        }
+
+        // 開始新訓練
+        function startNewTraining() {
+            if (confirm('確定要開始新的訓練會話嗎？')) {
+                // 這裡應該開啟訓練配置對話框
+                alert('功能開發中...');
+            }
+        }
+
+        // 查看會話詳情
+        async function viewSession(sessionId) {
+            try {
+                const response = await fetch(`/api/session/${sessionId}`);
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    // 顯示會話詳情（這裡簡化顯示）
+                    alert('會話詳情:\n' + JSON.stringify(data.session.progress, null, 2));
+                }
+            } catch (error) {
+                alert('載入會話詳情失敗');
+            }
+        }
+
+        // 顯示當前訓練進度
+        function showCurrentTraining(session) {
+            document.getElementById('currentTraining').style.display = 'block';
+
+            const progress = session.progress || {};
+
+            // 優先使用 progress_percent，否則計算百分比
+            let progressPercent = progress.progress_percent || 0;
+            if (!progressPercent && progress.total_epochs) {
+                progressPercent = (progress.current_epoch / progress.total_epochs) * 100;
+            }
+
+            document.getElementById('progressFill').style.width = progressPercent + '%';
+
+            // 根據是否有圖片數量顯示不同的文字
+            let progressText = '';
+            if (progress.total_epochs && progress.total_epochs > 100) {
+                // 顯示圖片處理進度
+                progressText = `處理圖片: ${progress.current_epoch || 0}/${progress.total_epochs || 0} 張 (${Math.round(progressPercent)}%)`;
+            } else {
+                // 顯示傳統 epoch 進度
+                progressText = `訓練進度: ${progress.current_epoch || 0}/${progress.total_epochs || 0} epochs (${Math.round(progressPercent)}%)`;
+            }
+
+            document.getElementById('progressText').innerHTML = `
+                ${progressText}<br>
+                ${progress.current_loss ? `當前損失: ${progress.current_loss.toFixed(4)}<br>` : ''}
+                ${progress.best_accuracy ? `最佳準確率: ${(progress.best_accuracy * 100).toFixed(1)}%` : ''}
+            `;
+
+            // 更新圖表
+            updateMetricsChart(session.metrics || []);
+        }
+
+        // 隱藏當前訓練進度
+        function hideCurrentTraining() {
+            document.getElementById('currentTraining').style.display = 'none';
+        }
+
+        // 更新指標圖表
+        function updateMetricsChart(metrics) {
+            const ctx = document.getElementById('metricsChart').getContext('2d');
+
+            if (metricsChart) {
+                metricsChart.destroy();
+            }
+
+            const epochs = metrics.map(m => m.epoch);
+            const losses = metrics.map(m => m.loss || 0);
+            const accuracies = metrics.map(m => (m.accuracy || 0) * 100);
+
+            metricsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: epochs,
+                    datasets: [{
+                        label: '損失值',
+                        data: losses,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        yAxisID: 'y'
+                    }, {
+                        label: '準確率 (%)',
+                        data: accuracies,
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: '損失值' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: '準確率 (%)' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

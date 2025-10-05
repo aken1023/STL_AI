@@ -1,0 +1,106 @@
+{
+  "851ededb": {
+    "id": "851ededb",
+    "status": "failed",
+    "stage": "訓練失敗: Dataset 'custom_training_851ededb/yolo_dataset/dataset.yaml' error ❌ Dataset 'custom_training_851ededb/yolo_dataset/dataset.yaml' images not found, missing path '/home/aken/code/STL/custom_training_851ededb/yolo_dataset/custom_training_851ededb/yolo_dataset/train/images'\nNote dataset download directory is '/home/aken/code/STL/datasets'. You can update this in '/home/aken/.config/Ultralytics/settings.json'",
+    "overall_progress": 70,
+    "details": {},
+    "logs": [
+      "開始處理 1 個STL檔案",
+      "R8107490: 渲染失敗 - \n\tInvalid color input: (warm)\n\tMust be a string, rgb(a) sequence, or hex color string.  For example:\n\t\tcolor='white'\n\t\tcolor='w'\n\t\tcolor=[1.0, 1.0, 1.0]\n\t\tcolor=[255, 255, 255]\n\t\tcolor='#FFFFFF'",
+      "R8107490: 後備方案生成 1/100 張圖片",
+      "R8107490: 後備方案生成 21/100 張圖片",
+      "R8107490: 後備方案生成 41/100 張圖片",
+      "R8107490: 後備方案生成 61/100 張圖片",
+      "R8107490: 後備方案生成 81/100 張圖片",
+      "R8107490: 完成生成 360 張圖片",
+      "YOLO資料集準備完成，包含 1 個類別",
+      "訓練失敗: Dataset 'custom_training_851ededb/yolo_dataset/dataset.yaml' error ❌ Dataset 'custom_training_851ededb/yolo_dataset/dataset.yaml' images not found, missing path '/home/aken/code/STL/custom_training_851ededb/yolo_dataset/custom_training_851ededb/yolo_dataset/train/images'\nNote dataset download directory is '/home/aken/code/STL/datasets'. You can update this in '/home/aken/.config/Ultralytics/settings.json'"
+    ],
+    "stl_files": [
+      {
+        "filename": "R8107490.stl"
+      }
+    ],
+    "settings": {
+      "epochs": "50",
+      "batch_size": "4",
+      "image_size": "416",
+      "images_per_model": "360"
+    },
+    "start_time": "2025-09-29T19:07:43.122788",
+    "model_path": null,
+    "accuracy": null,
+    "loss": null
+  },
+  "9f810b1e": {
+    "id": "9f810b1e",
+    "status": "failed",
+    "stage": "系統重啟，訓練中斷",
+    "overall_progress": 70,
+    "details": {},
+    "logs": [
+      "開始處理 1 個STL檔案",
+      "R8107490: 渲染失敗 - \n\tInvalid color input: (warm)\n\tMust be a string, rgb(a) sequence, or hex color string.  For example:\n\t\tcolor='white'\n\t\tcolor='w'\n\t\tcolor=[1.0, 1.0, 1.0]\n\t\tcolor=[255, 255, 255]\n\t\tcolor='#FFFFFF'",
+      "R8107490: 後備方案生成 1/100 張圖片",
+      "R8107490: 後備方案生成 21/100 張圖片",
+      "R8107490: 後備方案生成 41/100 張圖片",
+      "R8107490: 後備方案生成 61/100 張圖片",
+      "R8107490: 後備方案生成 81/100 張圖片",
+      "R8107490: 完成生成 180 張圖片",
+      "YOLO資料集準備完成，包含 1 個類別",
+      "開始YOLO訓練，資料集路徑: /home/aken/code/STL/custom_training_9f810b1e/yolo_dataset/dataset.yaml"
+    ],
+    "stl_files": [
+      {
+        "filename": "R8107490.stl"
+      }
+    ],
+    "settings": {
+      "training_mode": "normal",
+      "epochs": 50,
+      "batch_size": 4,
+      "image_size": 416,
+      "images_per_model": 180
+    },
+    "start_time": "2025-09-29T19:18:17.817287",
+    "model_path": null,
+    "accuracy": null,
+    "loss": null
+  },
+  "dfbc2bed": {
+    "id": "dfbc2bed",
+    "status": "training",
+    "stage": "開始YOLO模型訓練...",
+    "overall_progress": 70,
+    "details": {},
+    "logs": [
+      "開始處理 1 個STL檔案",
+      "R8107490: 渲染失敗 - \n\tInvalid color input: (warm)\n\tMust be a string, rgb(a) sequence, or hex color string.  For example:\n\t\tcolor='white'\n\t\tcolor='w'\n\t\tcolor=[1.0, 1.0, 1.0]\n\t\tcolor=[255, 255, 255]\n\t\tcolor='#FFFFFF'",
+      "R8107490: 後備方案生成 1/100 張圖片",
+      "R8107490: 後備方案生成 21/100 張圖片",
+      "R8107490: 後備方案生成 41/100 張圖片",
+      "R8107490: 後備方案生成 61/100 張圖片",
+      "R8107490: 後備方案生成 81/100 張圖片",
+      "R8107490: 完成生成 180 張圖片",
+      "YOLO資料集準備完成，包含 1 個類別",
+      "開始YOLO訓練，資料集路徑: /home/aken/code/STL/custom_training_dfbc2bed/yolo_dataset/dataset.yaml"
+    ],
+    "stl_files": [
+      {
+        "filename": "R8107490.stl"
+      }
+    ],
+    "settings": {
+      "training_mode": "normal",
+      "epochs": 50,
+      "batch_size": 4,
+      "image_size": 416,
+      "images_per_model": 180
+    },
+    "start_time": "2025-09-29T19:26:22.072580",
+    "model_path": null,
+    "accuracy": null,
+    "loss": null
+  }
+}

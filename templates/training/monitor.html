@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}訓練監控 - STL 系統{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-chart-line"></i> 訓練監控</h2>
+            <p class="text-muted">即時監控訓練進度和日誌</p>
+        </div>
+        <div class="col-auto">
+            <a href="/training" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> 返回訓練控制台
+            </a>
+        </div>
+    </div>
+
+    <!-- 訓練狀態卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">當前訓練狀態</h5>
+                    <span id="statusBadge" class="badge bg-secondary">就緒</span>
+                </div>
+                <div class="card-body">
+                    <!-- 訓練進度條 -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span><strong>訓練進度</strong></span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="progress" style="height: 30px;">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar" style="width: 0%">
+                                <span id="progressText">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 當前階段 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <strong>當前階段:</strong>
+                            <p id="currentStage" class="text-muted">-</p>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>訓練方法:</strong>
+                            <p id="trainingMethod" class="text-muted">-</p>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>預計完成時間:</strong>
+                            <p id="estimatedTime" class="text-muted">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 訓練日誌 -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">訓練日誌</h5>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="toggleAutoScroll()">
+                            <i class="fas fa-sync"></i> <span id="autoScrollText">自動滾動</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="clearLogs()">
+                            <i class="fas fa-trash"></i> 清除日誌
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="logContainer" class="bg-dark text-light p-3 rounded" style="max-height: 500px; overflow-y: auto; font-family: monospace;">
+                        <pre id="logContent" class="mb-0 text-light">等待訓練開始...</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let autoScroll = true;
+    let statusInterval = null;
+
+    // 載入訓練狀態
+    function loadTrainingStatus() {
+        fetch('/api/training_status')
+            .then(response => response.json())
+            .then(data => {
+                const statusBadge = document.getElementById('statusBadge');
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+                const progressPercent = document.getElementById('progressPercent');
+                const currentStage = document.getElementById('currentStage');
+                const trainingMethod = document.getElementById('trainingMethod');
+                const logContent = document.getElementById('logContent');
+                const logContainer = document.getElementById('logContainer');
+
+                if (data.is_training) {
+                    statusBadge.className = 'badge bg-primary';
+                    statusBadge.textContent = '訓練中';
+
+                    // 更新進度
+                    const progress = data.progress || 0;
+                    progressBar.style.width = progress + '%';
+                    progressText.textContent = progress + '%';
+                    progressPercent.textContent = progress + '%';
+
+                    // 更新階段
+                    currentStage.textContent = data.stage || '訓練中...';
+                    trainingMethod.textContent = 'FAISS 特徵索引';
+
+                    // 更新日誌
+                    if (data.log_lines && data.log_lines.length > 0) {
+                        logContent.textContent = data.log_lines.join('\n');
+
+                        // 自動滾動到底部
+                        if (autoScroll) {
+                            logContainer.scrollTop = logContainer.scrollHeight;
+                        }
+                    }
+                } else {
+                    statusBadge.className = 'badge bg-secondary';
+                    statusBadge.textContent = '就緒';
+
+                    progressBar.style.width = '0%';
+                    progressText.textContent = '0%';
+                    progressPercent.textContent = '0%';
+                    currentStage.textContent = '-';
+                    trainingMethod.textContent = '-';
+                }
+            })
+            .catch(error => {
+                console.error('載入狀態失敗:', error);
+            });
+    }
+
+    // 切換自動滾動
+    function toggleAutoScroll() {
+        autoScroll = !autoScroll;
+        const autoScrollText = document.getElementById('autoScrollText');
+        autoScrollText.textContent = autoScroll ? '自動滾動 ✓' : '自動滾動';
+    }
+
+    // 清除日誌
+    function clearLogs() {
+        document.getElementById('logContent').textContent = '日誌已清除，等待新的訓練日誌...';
+    }
+
+    // 初始化
+    loadTrainingStatus();
+    statusInterval = setInterval(loadTrainingStatus, 2000);  // 每 2 秒更新
+
+    // 頁面離開時清理
+    window.addEventListener('beforeunload', function() {
+        if (statusInterval) {
+            clearInterval(statusInterval);
+        }
+    });
+</script>
+{% endblock %}

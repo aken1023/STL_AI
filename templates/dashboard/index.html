@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}儀表板 - STL 系統{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="fas fa-tachometer-alt"></i> 系統儀表板</h2>
+
+    <!-- 統計卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">STL 檔案</h5>
+                    <h2 id="stlCount">-</h2>
+                    <p class="mb-0">總數量</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">訓練圖片</h5>
+                    <h2 id="imageCount">-</h2>
+                    <p class="mb-0">總數量</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">識別次數</h5>
+                    <h2 id="recognitionCount">-</h2>
+                    <p class="mb-0">今日</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">訓練狀態</h5>
+                    <h2 id="trainingStatus">就緒</h2>
+                    <p class="mb-0">當前</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 快速操作 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">快速操作</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <a href="/stl/upload" class="btn btn-primary btn-lg w-100">
+                                <i class="fas fa-upload d-block mb-2" style="font-size:2rem;"></i>
+                                上傳 STL 檔案
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="/stl/generate" class="btn btn-success btn-lg w-100">
+                                <i class="fas fa-image d-block mb-2" style="font-size:2rem;"></i>
+                                生成訓練圖片
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="/training" class="btn btn-info btn-lg w-100">
+                                <i class="fas fa-brain d-block mb-2" style="font-size:2rem;"></i>
+                                開始訓練
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="/recognition" class="btn btn-warning btn-lg w-100">
+                                <i class="fas fa-camera d-block mb-2" style="font-size:2rem;"></i>
+                                模型識別
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 系統資訊 -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">系統資訊</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <td>系統版本</td>
+                            <td id="systemVersion">{{ version }}</td>
+                        </tr>
+                        <tr>
+                            <td>建置日期</td>
+                            <td>{{ build_date }}</td>
+                        </tr>
+                        <tr>
+                            <td>識別引擎</td>
+                            <td><span class="badge bg-success">FAISS</span></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 載入統計資料
+    function loadStatistics() {
+        fetch('/api/statistics')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('stlCount').textContent = data.stl_count || 0;
+                    document.getElementById('imageCount').textContent = data.image_count || 0;
+                    document.getElementById('recognitionCount').textContent = data.recognition_count || 0;
+                }
+            });
+
+        fetch('/api/training_status')
+            .then(response => response.json())
+            .then(data => {
+                const statusEl = document.getElementById('trainingStatus');
+                if (data.is_training) {
+                    statusEl.textContent = '訓練中';
+                } else {
+                    statusEl.textContent = '就緒';
+                }
+            });
+    }
+
+    loadStatistics();
+    setInterval(loadStatistics, 5000);  // 每 5 秒更新
+</script>
+{% endblock %}

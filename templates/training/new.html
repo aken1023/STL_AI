@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}新訓練任務 - STL 系統{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-plus-circle"></i> 新訓練任務</h2>
+            <p class="text-muted">配置並啟動新的訓練任務</p>
+        </div>
+        <div class="col-auto">
+            <a href="/training" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> 返回訓練控制台
+            </a>
+        </div>
+    </div>
+
+    <!-- 訓練配置表單 -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">訓練配置</h5>
+                </div>
+                <div class="card-body">
+                    <form id="trainingForm">
+                        <!-- 訓練方法 -->
+                        <div class="mb-4">
+                            <h6>訓練方法</h6>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="faissMethod" checked>
+                                <label class="form-check-label" for="faissMethod">
+                                    <strong>FAISS 特徵索引</strong> - 高速相似度搜索
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- FAISS 配置 -->
+                        <div id="faissConfig">
+                            <h6>FAISS 配置</h6>
+
+                            <div class="mb-3">
+                                <label class="form-label">特徵提取模型</label>
+                                <select class="form-select" id="featureModel">
+                                    <option value="ResNet50" selected>ResNet50 (推薦)</option>
+                                    <option value="ResNet101">ResNet101 (更準確)</option>
+                                    <option value="VGG16">VGG16 (經典)</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">FAISS 索引類型</label>
+                                <select class="form-select" id="indexType">
+                                    <option value="IndexFlatIP" selected>IndexFlatIP (精確搜索)</option>
+                                    <option value="IndexFlatL2">IndexFlatL2 (L2 距離)</option>
+                                    <option value="IndexIVFFlat">IndexIVFFlat (快速搜索)</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">搜索相似度 K 值: <span id="kValueDisplay">5</span></label>
+                                <input type="range" class="form-range" id="kValue" min="3" max="20" value="5"
+                                       oninput="document.getElementById('kValueDisplay').textContent = this.value">
+                            </div>
+                        </div>
+
+                        <!-- 提交按鈕 -->
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-play"></i> 開始訓練
+                            </button>
+                            <a href="/training" class="btn btn-secondary btn-lg">
+                                <i class="fas fa-times"></i> 取消
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 訓練資訊 -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">資料集資訊</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>STL 模型:</strong> <span id="stlCount">-</span></p>
+                    <p><strong>訓練圖片:</strong> <span id="imageCount">-</span></p>
+                    <p><strong>類別數量:</strong> <span id="classCount">-</span></p>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0">預計訓練時間</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">根據當前配置，預計訓練時間：</p>
+                    <h3 id="estimatedTime">5-10 分鐘</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 載入統計資料
+    function loadStatistics() {
+        fetch('/api/statistics')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('stlCount').textContent = data.stl_count || 0;
+                    document.getElementById('imageCount').textContent = data.image_count || 0;
+                    document.getElementById('classCount').textContent = data.class_count || 0;
+                }
+            });
+    }
+
+    // 表單提交
+    document.getElementById('trainingForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        if (!confirm('確定要開始訓練嗎？')) return;
+
+        const config = {
+            training_methods: ['faiss'],
+            faiss_config: {
+                feature_model: document.getElementById('featureModel').value,
+                index_type: document.getElementById('indexType').value,
+                k_value: parseInt(document.getElementById('kValue').value)
+            }
+        };
+
+        fetch('/api/start_training', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('訓練已開始！');
+                window.location.href = '/training/monitor';
+            } else {
+                alert('訓練失敗: ' + (data.error || data.message));
+            }
+        });
+    });
+
+    // 初始化
+    loadStatistics();
+</script>
+{% endblock %}

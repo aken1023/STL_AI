@@ -1,0 +1,632 @@
+{% extends "base.html" %}
+
+{% block title %}模型識別 - STL 系統{% endblock %}
+
+{% block extra_head %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .drag-drop-area {
+        border: 3px dashed #ccc;
+        border-radius: 10px;
+        padding: 60px 20px;
+        text-align: center;
+        background: #f8f9fa;
+        transition: all 0.3s;
+        cursor: pointer;
+    }
+    .drag-drop-area:hover {
+        border-color: #0d6efd;
+        background: #e7f1ff;
+    }
+    .drag-drop-area.dragover {
+        border-color: #0d6efd;
+        background: #cfe2ff;
+        transform: scale(1.02);
+    }
+    .preview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+    }
+    .preview-item {
+        position: relative;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+    }
+    .preview-item img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+    }
+    .preview-item .remove-btn {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background: rgba(220, 53, 69, 0.9);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .preview-item .status-badge {
+        position: absolute;
+        bottom: 5px;
+        left: 5px;
+        font-size: 0.8rem;
+    }
+    .result-item {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-camera"></i> 模型識別</h2>
+            <p class="text-muted">拖拉或上傳圖片進行 STL 模型識別</p>
+        </div>
+    </div>
+
+    <!-- 拖拉上傳區域 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <div id="dragDropArea" class="drag-drop-area">
+                        <i class="fas fa-cloud-upload-alt fa-4x text-primary mb-3"></i>
+                        <h4>拖拉圖片到這裡</h4>
+                        <p class="text-muted">或點擊選擇檔案</p>
+                        <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+                        <button class="btn btn-primary mt-2" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-folder-open"></i> 選擇圖片
+                        </button>
+                    </div>
+
+                    <!-- 圖片預覽區 -->
+                    <div id="previewArea" class="preview-grid" style="display:none;"></div>
+
+                    <!-- 批次識別按鈕 -->
+                    <div id="batchControls" class="mt-3 text-center" style="display:none;">
+                        <button id="recognizeAllBtn" class="btn btn-success btn-lg">
+                            <i class="fas fa-magic"></i> 開始批次識別
+                        </button>
+                        <button id="clearAllBtn" class="btn btn-secondary btn-lg">
+                            <i class="fas fa-trash"></i> 清空全部
+                        </button>
+                    </div>
+
+                    <!-- 批次進度 -->
+                    <div id="batchProgress" class="mt-4" style="display:none;">
+                        <div class="progress" style="height: 30px;">
+                            <div id="batchProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar" style="width: 0%">
+                                <span id="batchProgressText">0%</span>
+                            </div>
+                        </div>
+                        <p id="batchStatus" class="mt-2 text-muted text-center"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 識別結果 -->
+    <div id="resultsSection" class="row" style="display:none;">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">識別結果</h5>
+                    <span id="resultSummary" class="badge bg-success">0 個成功</span>
+                </div>
+                <div class="card-body">
+                    <div id="resultsContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 圖片放大 Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalLabel">參考圖片</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" src="" class="img-fluid" alt="放大圖片">
+                <div class="mt-3">
+                    <p id="modalImageInfo" class="text-muted mb-0"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 防止整個頁面的拖拉預設行為
+    window.addEventListener('dragover', function(e) {
+        e.preventDefault();
+    }, false);
+    window.addEventListener('drop', function(e) {
+        e.preventDefault();
+    }, false);
+
+    let selectedFiles = [];
+    let recognitionResults = [];
+
+    const dragDropArea = document.getElementById('dragDropArea');
+    const fileInput = document.getElementById('fileInput');
+    const previewArea = document.getElementById('previewArea');
+    const batchControls = document.getElementById('batchControls');
+
+    // 拖拉事件處理
+    if (dragDropArea) {
+        console.log('拖拉區域已初始化');
+
+        dragDropArea.addEventListener('click', () => {
+            console.log('點擊拖拉區域');
+            fileInput.click();
+        });
+
+        dragDropArea.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('拖拉進入');
+            dragDropArea.classList.add('dragover');
+        });
+
+        dragDropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragDropArea.classList.add('dragover');
+        });
+
+        dragDropArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // 只有當離開拖拉區域本身時才移除樣式
+            if (e.target === dragDropArea) {
+                console.log('拖拉離開');
+                dragDropArea.classList.remove('dragover');
+            }
+        });
+
+        dragDropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('檔案拖拉放下');
+            dragDropArea.classList.remove('dragover');
+
+            const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+            console.log('過濾後的圖片檔案數量:', files.length);
+
+            if (files.length > 0) {
+                addFiles(files);
+            } else {
+                alert('請拖拉圖片檔案（JPG, PNG 等）');
+            }
+        });
+    } else {
+        console.error('找不到拖拉區域元素');
+    }
+
+    // 檔案選擇事件
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        addFiles(files);
+    });
+
+    // 添加檔案
+    function addFiles(files) {
+        files.forEach(file => {
+            if (!selectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+                selectedFiles.push(file);
+                createPreview(file, selectedFiles.length - 1);
+            }
+        });
+
+        updateUI();
+
+        // 立即開始識別
+        document.getElementById('recognizeAllBtn').click();
+    }
+
+    // 創建預覽
+    function createPreview(file, index) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const div = document.createElement('div');
+            div.className = 'preview-item';
+            div.dataset.index = index;
+            div.innerHTML = `
+                <img src="${e.target.result}" alt="${file.name}">
+                <button class="remove-btn" onclick="removeFile(${index})">
+                    <i class="fas fa-times"></i>
+                </button>
+                <span class="status-badge badge bg-secondary">等待識別</span>
+            `;
+            previewArea.appendChild(div);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // 移除檔案
+    function removeFile(index) {
+        selectedFiles.splice(index, 1);
+        updatePreviews();
+        updateUI();
+    }
+
+    // 更新預覽
+    function updatePreviews() {
+        previewArea.innerHTML = '';
+        selectedFiles.forEach((file, index) => {
+            createPreview(file, index);
+        });
+    }
+
+    // 更新 UI
+    function updateUI() {
+        if (selectedFiles.length > 0) {
+            previewArea.style.display = 'grid';
+            batchControls.style.display = 'block';
+        } else {
+            previewArea.style.display = 'none';
+            batchControls.style.display = 'none';
+        }
+    }
+
+    // 清空全部
+    document.getElementById('clearAllBtn').addEventListener('click', () => {
+        if (confirm('確定要清空所有圖片嗎？')) {
+            selectedFiles = [];
+            previewArea.innerHTML = '';
+            updateUI();
+        }
+    });
+
+    // 批次識別
+    document.getElementById('recognizeAllBtn').addEventListener('click', async () => {
+        if (selectedFiles.length === 0) {
+            alert('請先選擇圖片');
+            return;
+        }
+
+        const btn = document.getElementById('recognizeAllBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 識別中...';
+
+        const progressDiv = document.getElementById('batchProgress');
+        const progressBar = document.getElementById('batchProgressBar');
+        const progressText = document.getElementById('batchProgressText');
+        const statusText = document.getElementById('batchStatus');
+
+        progressDiv.style.display = 'block';
+        recognitionResults = [];
+
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles[i];
+            const progress = Math.round(((i + 1) / selectedFiles.length) * 100);
+
+            progressBar.style.width = progress + '%';
+            progressText.textContent = progress + '%';
+            statusText.textContent = `正在識別: ${file.name} (${i + 1}/${selectedFiles.length})`;
+
+            // 更新預覽狀態
+            const previewItem = previewArea.querySelector(`[data-index="${i}"]`);
+            if (previewItem) {
+                const badge = previewItem.querySelector('.status-badge');
+                badge.className = 'status-badge badge bg-primary';
+                badge.textContent = '識別中...';
+            }
+
+            // 執行識別
+            try {
+                const result = await recognizeImage(file);
+                result.file = file;
+                recognitionResults.push(result);
+
+                // 更新狀態
+                if (previewItem) {
+                    const badge = previewItem.querySelector('.status-badge');
+                    if (result.success) {
+                        badge.className = 'status-badge badge bg-success';
+                        badge.textContent = result.class_name;
+                    } else {
+                        badge.className = 'status-badge badge bg-danger';
+                        badge.textContent = '失敗';
+                    }
+                }
+            } catch (error) {
+                console.error('識別錯誤:', error);
+                if (previewItem) {
+                    const badge = previewItem.querySelector('.status-badge');
+                    badge.className = 'status-badge badge bg-danger';
+                    badge.textContent = '錯誤';
+                }
+            }
+        }
+
+        // 完成
+        progressBar.className = 'progress-bar bg-success';
+        statusText.textContent = '識別完成！';
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-magic"></i> 開始批次識別';
+
+        // 顯示結果
+        displayResults();
+    });
+
+    // 執行單個圖片識別
+    async function recognizeImage(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+        // 返回 results 陣列中的第一個結果
+        return data.results && data.results.length > 0 ? data.results[0] : data;
+    }
+
+    // 顯示結果
+    function displayResults() {
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultSummary = document.getElementById('resultSummary');
+
+        const successCount = recognitionResults.filter(r => r.success).length;
+        resultSummary.textContent = `${successCount} 個成功 / ${recognitionResults.length} 個總數`;
+
+        // 檢查是否顯示 3D 預覽
+        const show3D = document.getElementById('show3DPreview').checked;
+
+        resultsContainer.innerHTML = recognitionResults.map((result, index) => {
+            const reader = new FileReader();
+            let imgSrc = '';
+
+            // 同步讀取圖片
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', URL.createObjectURL(result.file), false);
+            xhr.send();
+            imgSrc = URL.createObjectURL(result.file);
+
+            if (result.success) {
+                return `
+                    <div class="result-item">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <img src="${imgSrc}" class="img-fluid rounded" alt="${result.file.name}">
+                                <p class="text-center mt-2 mb-0 small text-muted">上傳的圖片</p>
+                            </div>
+                            <div class="col-md-9">
+                                <h5 class="text-success">
+                                    <i class="fas fa-check-circle"></i> ${result.class_name}
+                                </h5>
+                                <p class="mb-1"><strong>檔案:</strong> ${result.file.name}</p>
+                                <p class="mb-1"><strong>分類編號:</strong> <span class="badge bg-info">${result.class_id !== undefined ? result.class_id : 'N/A'}</span></p>
+                                <p class="mb-1"><strong>信心度:</strong> ${(result.confidence * 100).toFixed(2)}%</p>
+                                <p class="mb-1"><strong>推論時間:</strong> ${result.inference_time ? result.inference_time.toFixed(1) : 0} ms</p>
+
+                                ${show3D && result.stl_file ? `
+                                    <div class="mt-3">
+                                        <strong>📦 STL 模型 3D 預覽:</strong>
+                                        <div class="mt-2">
+                                            <div id="stl3d_main_${index}" class="stl-viewer-inline" data-stl-url="${result.stl_file}" style="width: 100%; max-width: 500px; height: 400px; background: #f0f0f0; border-radius: 8px; border: 1px solid #dee2e6;"></div>
+                                            <p class="text-muted small mt-2 mb-0"><i class="fas fa-info-circle"></i> 滑鼠拖曳旋轉 | 滾輪縮放 | 右鍵平移</p>
+                                        </div>
+                                    </div>
+                                ` : ''}
+
+                                ${show3D && result.top_k ? `
+                                    <div class="mt-3">
+                                        <strong>📊 Top 5 最接近的 STL 模型:</strong>
+                                        <div class="row mt-2">
+                                            ${result.top_k.slice(0, 5).map((item, idx) => `
+                                                <div class="col-12 col-md-6 col-lg-4 mb-3">
+                                                    <div class="card h-100 ${idx === 0 ? 'border-success border-2' : ''}">
+                                                        <div class="card-header ${idx === 0 ? 'bg-success text-white' : 'bg-light'} p-2">
+                                                            <small class="mb-0"><strong>#${idx + 1}: ${item.class_name}</strong></small><br>
+                                                            <span class="badge ${idx === 0 ? 'bg-white text-success' : 'bg-secondary'}">${(item.confidence * 100).toFixed(1)}%</span>
+                                                        </div>
+                                                        ${item.stl_file ? `
+                                                            <div class="stl-viewer-inline" data-stl-url="${item.stl_file}" style="width: 100%; height: 250px; background: #f8f9fa;"></div>
+                                                        ` : `
+                                                            <div class="bg-secondary d-flex align-items-center justify-content-center" style="height: 250px;">
+                                                                <i class="fas fa-cube fa-3x text-white"></i>
+                                                            </div>
+                                                        `}
+                                                    </div>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                        <p class="text-muted small mt-2"><i class="fas fa-info-circle"></i> 每個模型都可以單獨操作：拖曳旋轉 | 滾輪縮放</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="result-item">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <img src="${imgSrc}" class="img-fluid rounded" alt="${result.file.name}">
+                            </div>
+                            <div class="col-md-9">
+                                <h5 class="text-danger">
+                                    <i class="fas fa-exclamation-circle"></i> 識別失敗
+                                </h5>
+                                <p class="mb-1"><strong>檔案:</strong> ${result.file.name}</p>
+                                <p class="mb-0 text-muted">${result.error || '未知錯誤'}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }).join('');
+
+        resultsSection.style.display = 'block';
+        resultsSection.scrollIntoView({ behavior: 'smooth' });
+
+        // 如果開啟 3D 預覽，載入所有 3D 模型
+        if (show3D) {
+            setTimeout(() => {
+                initAllInlineViewers();
+            }, 500);
+        }
+    }
+
+    // 顯示圖片放大 Modal
+    function showImageModal(imageUrl, filename, confidence) {
+        document.getElementById('modalImage').src = imageUrl;
+        document.getElementById('imageModalLabel').textContent = '參考圖片: ' + filename;
+        document.getElementById('modalImageInfo').textContent = `相似度: ${confidence}% | 檔案名稱: ${filename}`;
+
+        const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+        modal.show();
+    }
+
+    // 3D 查看器管理
+    let inlineViewers = [];
+
+    // 初始化所有內嵌 3D 查看器
+    function initAllInlineViewers() {
+        // 清理舊的查看器
+        inlineViewers.forEach(viewer => {
+            if (viewer.renderer) viewer.renderer.dispose();
+            if (viewer.mesh && viewer.mesh.geometry) viewer.mesh.geometry.dispose();
+            if (viewer.mesh && viewer.mesh.material) viewer.mesh.material.dispose();
+        });
+        inlineViewers = [];
+
+        // 找到所有內嵌查看器容器
+        const containers = document.querySelectorAll('.stl-viewer-inline');
+        containers.forEach(container => {
+            const stlUrl = container.getAttribute('data-stl-url');
+            if (stlUrl) {
+                initInlineViewer(container, stlUrl);
+            }
+        });
+    }
+
+    // 初始化單個內嵌 3D 查看器
+    function initInlineViewer(container, stlUrl) {
+        container.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100"><div class="spinner-border text-primary" role="status"></div></div>';
+
+        // 創建場景
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+
+        // 創建相機
+        const camera = new THREE.PerspectiveCamera(
+            50,
+            container.clientWidth / container.clientHeight,
+            0.1,
+            1000
+        );
+
+        // 創建渲染器
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.innerHTML = '';
+        container.appendChild(renderer.domElement);
+
+        // 添加光源
+        const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+        scene.add(ambientLight);
+
+        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
+        directionalLight1.position.set(1, 1, 1);
+        scene.add(directionalLight1);
+
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
+        directionalLight2.position.set(-1, -1, -0.5);
+        scene.add(directionalLight2);
+
+        // 添加軌道控制器
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 1.5;
+        controls.enablePan = true;
+        controls.enableZoom = true;
+
+        // 載入 STL 模型
+        const loader = new THREE.STLLoader();
+        loader.load(
+            stlUrl,
+            function (geometry) {
+                geometry.computeBoundingBox();
+                geometry.center();
+
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0xffd700,
+                    specular: 0x444444,
+                    shininess: 100
+                });
+
+                const mesh = new THREE.Mesh(geometry, material);
+                scene.add(mesh);
+
+                // 調整相機位置
+                const box = new THREE.Box3().setFromObject(mesh);
+                const size = box.getSize(new THREE.Vector3()).length();
+                const center = box.getCenter(new THREE.Vector3());
+
+                camera.position.set(center.x + size * 0.8, center.y + size * 0.6, center.z + size * 0.8);
+                controls.target.copy(center);
+                controls.update();
+
+                // 儲存查看器引用
+                const viewer = {
+                    scene,
+                    camera,
+                    renderer,
+                    controls,
+                    mesh,
+                    animate: function() {
+                        requestAnimationFrame(viewer.animate);
+                        viewer.controls.update();
+                        viewer.renderer.render(viewer.scene, viewer.camera);
+                    }
+                };
+                inlineViewers.push(viewer);
+                viewer.animate();
+            },
+            undefined,
+            function (error) {
+                console.error('載入 STL 失敗:', error);
+                container.innerHTML = '<div class="alert alert-danger m-2 small">無法載入 3D 模型</div>';
+            }
+        );
+    }
+
+</script>
+{% endblock %}
