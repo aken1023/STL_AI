@@ -15,8 +15,8 @@ import logging
 # 設定日誌
 logger = logging.getLogger(__name__)
 
-# 創建 Blueprint
-search_bp = Blueprint('search', __name__, url_prefix='/search')
+# 創建 Blueprint（不使用 url_prefix，讓路由直接定義完整路徑）
+search_bp = Blueprint('search', __name__)
 
 # 上傳設定
 SEARCH_UPLOAD_FOLDER = 'search_uploads'
@@ -60,7 +60,7 @@ def init_search_engine():
         return None
 
 
-@search_bp.route('/')
+@search_bp.route('/search')
 def index():
     """搜尋主頁"""
     # 檢查搜尋引擎狀態
