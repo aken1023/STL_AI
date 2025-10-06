@@ -3217,6 +3217,8 @@ def image_generation_status_api():
 @app.route('/api/generate_images', methods=['POST'])
 def generate_single_stl_images():
     """為單個 STL 檔案生成圖片"""
+    global image_generation_status
+
     try:
         data = request.get_json()
         stl_file = data.get('stl_file')
@@ -3228,6 +3230,20 @@ def generate_single_stl_images():
 
         if not os.path.exists(stl_path):
             return jsonify({'success': False, 'error': 'STL 檔案不存在'}), 404
+
+        # 重置狀態
+        image_generation_status = {
+            'is_generating': True,
+            'progress': 0,
+            'current_model': 1,
+            'total_models': 1,
+            'current_model_name': stl_file,
+            'current_file': stl_file,
+            'log_lines': [f'📝 開始為 {stl_file} 生成圖片...'],
+            'success': False,
+            'error': None,
+            'total_images': 360
+        }
 
         # 在背景執行圖片生成
         import threading
@@ -3244,9 +3260,12 @@ def generate_single_stl_images():
 
 def generate_single_images_thread(stl_file):
     """背景執行緒：為單個 STL 生成圖片"""
+    global image_generation_status
+
     try:
-        # 使用 generate_images_color.py，只處理指定的 STL
         model_name = os.path.splitext(stl_file)[0]
+        image_generation_status['log_lines'].append(f'🚀 開始處理模型: {model_name}')
+        image_generation_status['progress'] = 10
 
         # 創建臨時 Python 腳本來生成單個模型的圖片
         script_content = f'''
@@ -3260,25 +3279,58 @@ generate_images_for_model(stl_path, "{model_name}")
 print(f"✅ {{model_name}} 圖片生成完成")
 '''
 
-        # 寫入臨時腳本
         temp_script = f'temp_generate_{model_name}.py'
         with open(temp_script, 'w', encoding='utf-8') as f:
             f.write(script_content)
 
-        # 執行生成
-        result = subprocess.run(
+        image_generation_status['log_lines'].append(f'📝 載入 STL 模型: {stl_file}')
+        image_generation_status['progress'] = 20
+
+        # 執行生成，實時讀取輸出
+        process = subprocess.Popen(
             ['python', temp_script],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            timeout=600  # 10分鐘超時
+            bufsize=1
         )
+
+        # 模擬進度更新（因為實際腳本沒有輸出進度）
+        total_images = 360
+        for i in range(20, 100, 5):
+            time.sleep(2)  # 每2秒更新一次
+            if process.poll() is not None:  # 進程已結束
+                break
+            current_img = int((i - 20) / 80 * total_images)
+            image_generation_status['progress'] = i
+            image_generation_status['log_lines'].append(f'⏳ 生成進度: {current_img}/{total_images} 張圖片')
+
+        # 等待進程完成
+        process.wait(timeout=600)
+
+        if process.returncode == 0:
+            image_generation_status['progress'] = 100
+            image_generation_status['log_lines'].append(f'✅ {model_name} 圖片生成完成！')
+            image_generation_status['success'] = True
+        else:
+            image_generation_status['log_lines'].append(f'❌ 生成失敗，返回碼: {process.returncode}')
+            image_generation_status['error'] = f'生成失敗，返回碼: {process.returncode}'
+
+        image_generation_status['is_generating'] = False
 
         # 清理臨時檔案
         if os.path.exists(temp_script):
             os.remove(temp_script)
 
+    except subprocess.TimeoutExpired:
+        image_generation_status['log_lines'].append('❌ 生成超時（10分鐘）')
+        image_generation_status['error'] = '生成超時'
+        image_generation_status['is_generating'] = False
     except Exception as e:
         logger.error(f"生成圖片失敗: {e}")
+        image_generation_status['log_lines'].append(f'❌ 錯誤: {str(e)}')
+        image_generation_status['error'] = str(e)
+        image_generation_status['is_generating'] = False
 
 @app.route('/api/delete_stl', methods=['POST'])
 def delete_stl_file():
