@@ -1132,7 +1132,9 @@
             logContainer.innerHTML = '<div>📝 初始化批次生成任務...</div>';
 
             const response = await fetch('/api/generate_all_images', {
-                method: 'POST'
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
             });
 
             const data = await response.json();
