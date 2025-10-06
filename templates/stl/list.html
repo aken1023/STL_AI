@@ -594,11 +594,26 @@
         return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
     }
 
-    // 載入 STL 檔案列表
+    // 載入 STL 檔案列表（帶重試機制）
+    let loadRetryCount = 0;
+    const MAX_RETRIES = 3;
+
     async function loadSTLFiles() {
         try {
-            const response = await fetch('/api/list_stl_files');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超時
+
+            const response = await fetch('/api/list_stl_files', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
             const data = await response.json();
+            loadRetryCount = 0; // 重置重試計數
 
             if (data.success && data.files.length > 0) {
                 stlFiles = data.files;
@@ -623,6 +638,29 @@
             }
         } catch (error) {
             console.error('載入失敗:', error);
+
+            // 如果是連接錯誤且未超過重試次數，則重試
+            if ((error.name === 'AbortError' || error.message.includes('Failed to fetch')) && loadRetryCount < MAX_RETRIES) {
+                loadRetryCount++;
+                console.log(`重試載入 (${loadRetryCount}/${MAX_RETRIES})...`);
+                setTimeout(() => loadSTLFiles(), 2000 * loadRetryCount); // 遞增延遲
+            } else {
+                // 顯示錯誤訊息
+                const errorMsg = `<div class="col-12"><div class="alert alert-warning text-center">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    載入失敗，請稍後重試或檢查網路連接
+                    <button class="btn btn-sm btn-primary ms-2" onclick="loadSTLFiles()">
+                        <i class="fas fa-sync"></i> 重新載入
+                    </button>
+                </div></div>`;
+
+                if (viewMode === 'simple') {
+                    document.getElementById('stlFilesTableBody').innerHTML =
+                        `<tr><td colspan="6" class="text-center">${errorMsg}</td></tr>`;
+                } else {
+                    document.getElementById('stlFilesList').innerHTML = errorMsg;
+                }
+            }
         }
     }
 
@@ -934,10 +972,21 @@
         displaySTLFiles(stlFiles);
     }
 
-    // 檢查訓練狀態
+    // 檢查訓練狀態（帶超時和錯誤處理）
     async function checkTrainingStatus() {
         try {
-            const response = await fetch('/api/training_status');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超時
+
+            const response = await fetch('/api/training_status', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
             const data = await response.json();
 
             if (data.is_training) {
@@ -953,16 +1002,32 @@
                 document.getElementById('trainingStatusCard').style.display = 'none';
 
                 // 檢查是否有訓練好的模型
-                const statsResponse = await fetch('/api/search/stats');
-                if (statsResponse.ok) {
-                    const statsData = await statsResponse.json();
-                    if (statsData.success) {
-                        document.getElementById('trainingStatus').textContent = '已訓練';
+                try {
+                    const statsController = new AbortController();
+                    const statsTimeoutId = setTimeout(() => statsController.abort(), 5000);
+
+                    const statsResponse = await fetch('/api/search/stats', {
+                        signal: statsController.signal
+                    });
+                    clearTimeout(statsTimeoutId);
+
+                    if (statsResponse.ok) {
+                        const statsData = await statsResponse.json();
+                        if (statsData.success) {
+                            document.getElementById('trainingStatus').textContent = '已訓練';
+                        }
                     }
+                } catch (statsError) {
+                    // 靜默處理 stats 錯誤，不影響主要功能
+                    console.warn('無法獲取訓練統計:', statsError.message);
                 }
             }
         } catch (error) {
-            console.error('檢查訓練狀態失敗:', error);
+            // 只在非超時錯誤時記錄
+            if (error.name !== 'AbortError') {
+                console.error('檢查訓練狀態失敗:', error);
+            }
+            // 連接錯誤時不顯示錯誤，避免干擾用戶
         }
     }
 
